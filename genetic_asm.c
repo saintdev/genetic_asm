@@ -1,14 +1,36 @@
+#include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
 #include <stdint.h>
 #include <assert.h>
 #include <time.h>
+#include <string.h>
 
-static uint8_t levels[64];
+#define NUMREGS 16
+#define MAX_INSTR 500
+#define NUM_PROGRAMS 20
 
-#define ZIG(i,y,x) levels[i] = x*8+y;
+#define TRIES 1000000
+#define ITERATIONS 1000000
+#define WEIGHT 20
+#define STARTTEMP 100
 
-void init_levels()
+static uint8_t levels[4*4];
+static uint8_t coeffs[4*4];
+
+static uint8_t srcregisters[NUMREGS][8];
+static uint8_t resultregisters[8][8];
+static uint8_t registers[NUMREGS][8];
+static uint8_t counter[65];
+
+typedef struct program {
+    int length;
+    uint8_t instructions[MAX_INSTR][4];
+} program_t;
+
+#define ZIG(i,y,x) levels[i] = coeffs[x*8+y];
+
+void init_levels_8x8()
 {
     ZIG( 0,0,0) ZIG( 1,0,1) ZIG( 2,1,0) ZIG( 3,2,0)
     ZIG( 4,1,1) ZIG( 5,0,2) ZIG( 6,0,3) ZIG( 7,1,2)
@@ -28,13 +50,24 @@ void init_levels()
     ZIG(60,5,7) ZIG(61,6,7) ZIG(62,7,6) ZIG(63,7,7)
 }
 
-#define NUMREGS 16
-#define MAX_INSTR 500
+#undef ZIG
+#define ZIG(i,y,x) levels[i] = coeffs[x*4+y];
 
-static uint8_t srcregisters[NUMREGS][8];
-static uint8_t resultregisters[8][8];
-static uint8_t registers[NUMREGS][8];
-static uint8_t counter[65];
+void init_levels_4x4()
+{
+    for(int i = 0; i < 4; i++)
+        for(int j = 0; j < 4; j++)
+            coeffs[i*4+j] = rand() % UINT8_MAX;
+    ZIG( 0,0,0) ZIG( 1,0,1) ZIG( 2,1,0) ZIG( 3,2,0)
+    ZIG( 4,1,1) ZIG( 5,0,2) ZIG( 6,0,3) ZIG( 7,1,2)
+    ZIG( 8,2,1) ZIG( 9,3,0) ZIG(10,3,1) ZIG(11,2,2)
+    ZIG(12,1,3) ZIG(13,2,3) ZIG(14,3,2) ZIG(15,3,3)
+}
+
+void init_levels()
+{
+    init_levels_4x4();
+}
 
 enum instructions
 {
@@ -54,6 +87,35 @@ enum instructions
     PSHUFHW     = 13,
     NUM_INSTR   = 14
 };
+
+
+static const int allowedshuf[24] = { (0<<6)+(1<<4)+(2<<2)+(3<<0),
+                                     (0<<6)+(1<<4)+(3<<2)+(2<<0),
+                                     (0<<6)+(2<<4)+(3<<2)+(1<<0),
+                                     (0<<6)+(2<<4)+(1<<2)+(3<<0),
+                                     (0<<6)+(3<<4)+(2<<2)+(1<<0),
+                                     (0<<6)+(3<<4)+(1<<2)+(2<<0),
+
+                                     (1<<6)+(0<<4)+(2<<2)+(3<<0),
+                                     (1<<6)+(0<<4)+(3<<2)+(2<<0),
+                                     (1<<6)+(2<<4)+(3<<2)+(0<<0),
+                                     (1<<6)+(2<<4)+(0<<2)+(3<<0),
+                                     (1<<6)+(3<<4)+(2<<2)+(0<<0),
+                                     (1<<6)+(3<<4)+(0<<2)+(2<<0),
+
+                                     (2<<6)+(1<<4)+(0<<2)+(3<<0),
+                                     (2<<6)+(1<<4)+(3<<2)+(0<<0),
+                                     (2<<6)+(0<<4)+(3<<2)+(1<<0),
+                                     (2<<6)+(0<<4)+(1<<2)+(3<<0),
+                                     (2<<6)+(3<<4)+(0<<2)+(1<<0),
+                                     (2<<6)+(3<<4)+(1<<2)+(0<<0),
+
+                                     (3<<6)+(1<<4)+(2<<2)+(0<<0),
+                                     (3<<6)+(1<<4)+(0<<2)+(2<<0),
+                                     (3<<6)+(2<<4)+(0<<2)+(1<<0),
+                                     (3<<6)+(2<<4)+(1<<2)+(0<<0),
+                                     (3<<6)+(0<<4)+(2<<2)+(1<<0),
+                                     (3<<6)+(0<<4)+(1<<2)+(2<<0)};
 
 void print_instructions( uint8_t (*instructions)[4], int num_instructions )
 {
@@ -110,9 +172,21 @@ void print_instructions( uint8_t (*instructions)[4], int num_instructions )
                 fprintf( stderr, "Error: unsupported instruction!\n");
                 assert(0);
         }
-        if(instr[0] < PSLLDQ ) printf(" m%d, m%d\n", instr[3], instr[2] );
-        else if(instr[0] < PSHUFLW )  printf(" m%d, %d\n", instr[3], instr[2]*(instr[0] < PSLLQ ? 2 : 16) );
-        else                    printf(" m%d, m%d, 0x%x\n", instr[3], instr[1], instr[2] );
+        if(instr[0] < PSLLDQ ) {
+            printf(" m%d, ", instr[1], instr[2] );
+            if (instr[2] < NUMREGS)
+                printf("m%d", instr[2]);
+            else
+                printf("0x%x", allowedshuf[instr[2] - NUMREGS]);
+        } else if(instr[0] < PSHUFLW ) {
+            printf(" m%d, ", instr[1]);
+            if (instr[2] < NUMREGS)
+                printf("m%d", instr[2]);
+            else
+                printf("%d", instr[2] - NUMREGS);
+        }
+        else                    printf(" m%d, m%d, 0x%x", instr[1], instr[2], instr[3] );
+        printf("\n");
     }
 }
 
@@ -334,17 +408,49 @@ void init_resultregisters()
 void init_srcregisters()
 {
     int r, i;
-    for(r=0;r<8;r++)
-        for(i=0;i<8;i++)
-            srcregisters[r][i] = i+r*8;
-    for(r=8;r<NUMREGS;r++)
-        for(i=0;i<8;i++)
-            srcregisters[r][i] = 64;
+    for(r = 0; r < 2; r++)
+        memcpy(srcregisters[r], &coeffs[r*8], sizeof(uint8_t) * 8);
+    for(; r < NUMREGS; r++)
+        memset(srcregisters[r], 0, sizeof(srcregisters[r][0]) * 8);
 }
 
 void init_registers()
 {
     memcpy( registers, srcregisters, sizeof(srcregisters) );
+}
+
+void init_programs(program_t *programs)
+{
+    for(int i = 0; i < NUM_PROGRAMS; i++) {
+        program_t *program = &programs[i];
+        program->length = (rand() % (MAX_INSTR - 1)) + 1;
+        for(int j = 0; j < program->length; j++) {
+            int instr = rand() % NUM_INSTR;
+            int output = rand() % NUMREGS;
+            int input1, input2 = 0;
+
+            /* FIXME: This should be completely random, instead of the guided randomnes we have below.
+             * This may help generate more valid code, however.
+             */
+            if( instr < PSLLDQ )
+                input1 = rand() % (NUMREGS + 24);
+            else if( instr < PSLLQ )
+                input1 = rand() % 16;
+            else if( instr < PSLLD )
+                input1 = rand() % (NUMREGS + 64);
+            else if( instr < PSHUFLW )
+                input1 = rand() % (NUMREGS + 32);
+            else {
+                input1 = rand() % NUMREGS;
+                input2 = allowedshuf[rand() % 24];
+            }
+
+            program->instructions[j][0] = instr;
+            program->instructions[j][1] = output;
+            program->instructions[j][2] = input1;
+            program->instructions[j][3] = input2;
+        }
+    }
 }
 
 int run_program( uint8_t (*instructions)[4], int num_instructions, int debug )
@@ -450,33 +556,7 @@ void instruction_shift( uint8_t (*instructions)[4], int loc, int numinstructions
 
 int generate_algorithm( uint8_t (*instructions)[4], uint8_t (*srcinstructions)[4], int numinstructions )
 {
-    static const int allowedshuf[24] = { (0<<6)+(1<<4)+(2<<2)+(3<<0),
-                                         (0<<6)+(1<<4)+(3<<2)+(2<<0),
-                                         (0<<6)+(2<<4)+(3<<2)+(1<<0),
-                                         (0<<6)+(2<<4)+(1<<2)+(3<<0),
-                                         (0<<6)+(3<<4)+(2<<2)+(1<<0),
-                                         (0<<6)+(3<<4)+(1<<2)+(2<<0),
 
-                                         (1<<6)+(0<<4)+(2<<2)+(3<<0),
-                                         (1<<6)+(0<<4)+(3<<2)+(2<<0),
-                                         (1<<6)+(2<<4)+(3<<2)+(0<<0),
-                                         (1<<6)+(2<<4)+(0<<2)+(3<<0),
-                                         (1<<6)+(3<<4)+(2<<2)+(0<<0),
-                                         (1<<6)+(3<<4)+(0<<2)+(2<<0),
-                                         
-                                         (2<<6)+(1<<4)+(0<<2)+(3<<0),
-                                         (2<<6)+(1<<4)+(3<<2)+(0<<0),
-                                         (2<<6)+(0<<4)+(3<<2)+(1<<0),
-                                         (2<<6)+(0<<4)+(1<<2)+(3<<0),
-                                         (2<<6)+(3<<4)+(0<<2)+(1<<0),
-                                         (2<<6)+(3<<4)+(1<<2)+(0<<0),
-
-                                         (3<<6)+(1<<4)+(2<<2)+(0<<0),
-                                         (3<<6)+(1<<4)+(0<<2)+(2<<0),
-                                         (3<<6)+(2<<4)+(0<<2)+(1<<0),
-                                         (3<<6)+(2<<4)+(1<<2)+(0<<0),
-                                         (3<<6)+(0<<4)+(2<<2)+(1<<0),
-                                         (3<<6)+(0<<4)+(1<<2)+(2<<0)};
     memcpy( instructions, srcinstructions, numinstructions * sizeof(uint8_t) * 4 );
     int numchanges = rand() % MAXCHANGES;
     int i;
@@ -496,7 +576,7 @@ int generate_algorithm( uint8_t (*instructions)[4], uint8_t (*srcinstructions)[4
             input2 = 1;
         else
             input2 = allowedshuf[rand() % 24];
-        
+
         int output = rand() % NUMREGS;
         int loc = rand() & 1 ? rand() % (numinstructions+1) : numinstructions;
         if(loc == numinstructions) change=1;
@@ -539,35 +619,37 @@ int instruction_cost( uint8_t (*instructions)[4], int numinstructions )
     return cost;
 }
 
-#define TRIES 1000000
-#define ITERATIONS 1000000
-#define WEIGHT 20
-#define STARTTEMP 100
-
 int main()
 {
-    static uint8_t instructions[MAX_INSTR][4];
-    static uint8_t binstructions[MAX_INSTR][4] = {0};
-    int num_instructions = 0;
-    int num_binstructions = 0;
-    int bcost = 1<<30;
-    int binstruction_cost = 0;
-    int bcorrect = 0;
-    init_levels();
-    init_srcregisters();
-    init_resultregisters();
+    program_t programs[NUM_PROGRAMS];
+//     static uint8_t binstructions[MAX_INSTR][4] = {0};
+//     int num_binstructions = 0;
+//     int bcost = 1<<30;
+//     int binstruction_cost = 0;
+//     int bcorrect = 0;
     int t, i;
-    
+
     int ltime;
-    int temperature = STARTTEMP;
-    int gototemp = STARTTEMP;
+//     int temperature = STARTTEMP;
+//     int gototemp = STARTTEMP;
+//     int iterations_since_change = 0;
+//     int oldbestbcost = 1<<30;
+//     int bestbcost = 1<<30;
 
     /* get the current calendar time */
     ltime = time(NULL);
     srand(ltime);
-    int iterations_since_change = 0;
-    int oldbestbcost = 1<<30;
-    int bestbcost = 1<<30;
+
+    init_levels();
+    init_srcregisters();
+    init_resultregisters();
+    init_programs(programs);
+
+    for(i = 0; i < NUM_PROGRAMS; i++) {
+        print_instructions(programs[i].instructions, programs[i].length);
+        printf("\n");
+    }
+#if 0
     for( i = 0; i < ITERATIONS; i++ )
     {
         int prevcost = bcost;
@@ -608,5 +690,6 @@ int main()
             oldbestbcost = bestbcost;
         }
     }
+#endif
     return 0;
 }
