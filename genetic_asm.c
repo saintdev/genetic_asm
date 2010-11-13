@@ -23,9 +23,16 @@ static uint8_t resultregisters[8][8];
 static uint8_t registers[NUMREGS][8];
 static uint8_t counter[65];
 
+typedef struct instruction {
+    uint8_t opcode;
+    uint8_t operands[3];
+    uint8_t flags;
+    void (*fp)(uint8_t src[8], uint8_t dst[8], uint8_t imm);
+} instruction_t;
+
 typedef struct program {
     int length;
-    uint8_t instructions[MAX_INSTR][4];
+    instruction_t instructions[MAX_INSTR];
 } program_t;
 
 #define ZIG(i,y,x) levels[i] = coeffs[x*8+y];
@@ -117,14 +124,14 @@ static const int allowedshuf[24] = { (0<<6)+(1<<4)+(2<<2)+(3<<0),
                                      (3<<6)+(0<<4)+(2<<2)+(1<<0),
                                      (3<<6)+(0<<4)+(1<<2)+(2<<0)};
 
-void print_instructions( uint8_t (*instructions)[4], int num_instructions )
+void print_instructions( instruction_t *instructions, int num_instructions, int debug )
 {
     int i;
     for( i = 0; i < num_instructions; i++ )
     {
-        uint8_t *instr = instructions[i];
-        if( instr[0] != PSHUFLW && instr[0] != PSHUFHW && instr[1] != instr[3] ) printf("movdqa m%d, m%d\n", instr[3], instr[1] );
-        switch( instr[0] )
+        instruction_t *instr = &instructions[i];
+//         if( instr->opcode != PSHUFLW && instr->opcode != PSHUFHW && instr->operands[1] != instr->operands[0] ) printf("movdqa m%d, m%d\n", instr[3], instr[1] );
+        switch( instr->opcode )
         {
             case PUNPCKLWD:
                 printf( "punpcklwd" );
@@ -172,20 +179,23 @@ void print_instructions( uint8_t (*instructions)[4], int num_instructions )
                 fprintf( stderr, "Error: unsupported instruction!\n");
                 assert(0);
         }
-        if(instr[0] < PSLLDQ ) {
-            printf(" m%d, ", instr[1], instr[2] );
-            if (instr[2] < NUMREGS)
-                printf("m%d", instr[2]);
+        if(instr->opcode < PSLLDQ ) {
+            printf(" m%d, ", instr->operands[0]);
+            if (instr->operands[1] < NUMREGS)
+                printf("m%d", instr->operands[1]);
             else
-                printf("0x%x", allowedshuf[instr[2] - NUMREGS]);
-        } else if(instr[0] < PSHUFLW ) {
-            printf(" m%d, ", instr[1]);
-            if (instr[2] < NUMREGS)
-                printf("m%d", instr[2]);
+                printf("0x%x", allowedshuf[instr->operands[1] - NUMREGS]);
+        } else if(instr->opcode < PSHUFLW ) {
+            printf(" m%d, ", instr->operands[0]);
+            if (instr->opcode >= PSLLQ && instr->operands[1] < NUMREGS)
+                printf("m%d", instr->operands[1]);
+            else if (instr->opcode < PSLLQ)
+                printf("%d", instr->operands[1]);
             else
-                printf("%d", instr[2] - NUMREGS);
+                printf("%d", instr->operands[1] - NUMREGS);
         }
-        else                    printf(" m%d, m%d, 0x%x", instr[1], instr[2], instr[3] );
+        else                    printf(" m%d, m%d, 0x%x", instr->operands[0], instr->operands[1], instr->operands[2] );
+        if (debug && instr->flags) printf(" *");
         printf("\n");
     }
 }
@@ -428,12 +438,13 @@ void init_programs(program_t *programs)
             int instr = rand() % NUM_INSTR;
             int output = rand() % NUMREGS;
             int input1, input2 = 0;
+            instruction_t *instruction = &program->instructions[j];
 
             /* FIXME: This should be completely random, instead of the guided randomnes we have below.
              * This may help generate more valid code, however.
              */
             if( instr < PSLLDQ )
-                input1 = rand() % (NUMREGS + 24);
+                input1 = rand() % NUMREGS;
             else if( instr < PSLLQ )
                 input1 = rand() % 16;
             else if( instr < PSLLD )
@@ -445,17 +456,54 @@ void init_programs(program_t *programs)
                 input2 = allowedshuf[rand() % 24];
             }
 
-            program->instructions[j][0] = instr;
-            program->instructions[j][1] = output;
-            program->instructions[j][2] = input1;
-            program->instructions[j][3] = input2;
+            instruction->opcode = instr;
+            instruction->operands[0] = output;
+            instruction->operands[1] = input1;
+            instruction->operands[2] = input2;
         }
     }
 }
 
-int run_program( uint8_t (*instructions)[4], int num_instructions, int debug )
+void get_effective_program(program_t *in, program_t *out)
+{
+    uint8_t reg_eff[NUMREGS] = {0};
+    int i = in->length - 1;
+    int j;
+
+    reg_eff[0] = 1;
+    /* We want our results in r0-r7. For 4x4 DCT, we only need one result register. */
+    while(i >= 0 && in->instructions[i].operands[0] != 0) {
+        in->instructions[i].flags = 0;
+        i--;
+    }
+    for( ; i >= 0; i--) {
+        instruction_t *instr = &in->instructions[i];
+
+        instr->flags = 0;
+        for (j = 0; j < NUMREGS; j++)
+            if (reg_eff[j] && instr->operands[0] == j)
+                instr->flags = 1;
+
+        if (!instr->flags)
+            continue;
+        if (instr->operands[1] < NUMREGS &&
+            (instr->opcode != PSLLDQ && instr->opcode != PSRLDQ))
+            reg_eff[instr->operands[1]] = 1;
+    }
+
+    for(j = i = 0; i < in->length; i++) {
+        if (!in->instructions[i].flags)
+            continue;
+        in->instructions[i].flags = 0;
+        out->instructions[j++] = in->instructions[i];
+    }
+    out->length = j;
+}
+#if 0
+int run_program( program_t *program, int debug )
 {
     int i,r,j;
+
     init_registers();
     memset( counter, 1, sizeof( counter ) );
     if( debug )
@@ -486,7 +534,7 @@ int run_program( uint8_t (*instructions)[4], int num_instructions, int debug )
     }
     return 1;
 }
-
+#endif
 //#define CHECK_LOC if( i >= 2 && i <= 5 ) continue;
 #define CHECK_LOC if( 0 ) continue;
 
@@ -646,7 +694,11 @@ int main()
     init_programs(programs);
 
     for(i = 0; i < NUM_PROGRAMS; i++) {
-        print_instructions(programs[i].instructions, programs[i].length);
+        program_t eff_prog;
+
+        get_effective_program(&programs[i], &eff_prog);
+
+        print_instructions(eff_prog.instructions, eff_prog.length, 1);
         printf("\n");
     }
 #if 0
