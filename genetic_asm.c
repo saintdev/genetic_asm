@@ -5,33 +5,35 @@
 #include <assert.h>
 #include <time.h>
 #include <string.h>
+#include <limits.h>
 
 #define NUMREGS 16
 #define MAX_INSTR 500
-#define NUM_PROGRAMS 20
+#define NUM_PROGRAMS 32
 
 #define TRIES 1000000
 #define ITERATIONS 1000000
 #define WEIGHT 20
 #define STARTTEMP 100
 
-static uint8_t levels[4*4];
-static uint8_t coeffs[4*4];
+static uint16_t levels[8*8];
+static uint16_t coeffs[8*8];
 
-static uint8_t srcregisters[NUMREGS][8];
-static uint8_t resultregisters[8][8];
-static uint8_t registers[NUMREGS][8];
+static uint16_t srcregisters[NUMREGS][8];
+static uint16_t resultregisters[8][8];
+static uint16_t registers[NUMREGS][8];
 static uint8_t counter[65];
 
 typedef struct instruction {
     uint8_t opcode;
     uint8_t operands[3];
     uint8_t flags;
-    void (*fp)(uint8_t src[8], uint8_t dst[8], uint8_t imm);
+    void (*fp)(uint16_t src[8], uint16_t dst[8], uint8_t imm);
 } instruction_t;
 
 typedef struct program {
     int length;
+    int cost;
     instruction_t instructions[MAX_INSTR];
 } program_t;
 
@@ -64,7 +66,7 @@ void init_levels_4x4()
 {
     for(int i = 0; i < 4; i++)
         for(int j = 0; j < 4; j++)
-            coeffs[i*4+j] = rand() % UINT8_MAX;
+            coeffs[i*4+j] = rand() % UINT16_MAX;
     ZIG( 0,0,0) ZIG( 1,0,1) ZIG( 2,1,0) ZIG( 3,2,0)
     ZIG( 4,1,1) ZIG( 5,0,2) ZIG( 6,0,3) ZIG( 7,1,2)
     ZIG( 8,2,1) ZIG( 9,3,0) ZIG(10,3,1) ZIG(11,2,2)
@@ -96,33 +98,33 @@ enum instructions
 };
 
 
-static const int allowedshuf[24] = { (0<<6)+(1<<4)+(2<<2)+(3<<0),
-                                     (0<<6)+(1<<4)+(3<<2)+(2<<0),
-                                     (0<<6)+(2<<4)+(3<<2)+(1<<0),
-                                     (0<<6)+(2<<4)+(1<<2)+(3<<0),
-                                     (0<<6)+(3<<4)+(2<<2)+(1<<0),
-                                     (0<<6)+(3<<4)+(1<<2)+(2<<0),
+static const uint8_t allowedshuf[24] = { (0<<6)+(1<<4)+(2<<2)+(3<<0),
+                                         (0<<6)+(1<<4)+(3<<2)+(2<<0),
+                                         (0<<6)+(2<<4)+(3<<2)+(1<<0),
+                                         (0<<6)+(2<<4)+(1<<2)+(3<<0),
+                                         (0<<6)+(3<<4)+(2<<2)+(1<<0),
+                                         (0<<6)+(3<<4)+(1<<2)+(2<<0),
 
-                                     (1<<6)+(0<<4)+(2<<2)+(3<<0),
-                                     (1<<6)+(0<<4)+(3<<2)+(2<<0),
-                                     (1<<6)+(2<<4)+(3<<2)+(0<<0),
-                                     (1<<6)+(2<<4)+(0<<2)+(3<<0),
-                                     (1<<6)+(3<<4)+(2<<2)+(0<<0),
-                                     (1<<6)+(3<<4)+(0<<2)+(2<<0),
+                                         (1<<6)+(0<<4)+(2<<2)+(3<<0),
+                                         (1<<6)+(0<<4)+(3<<2)+(2<<0),
+                                         (1<<6)+(2<<4)+(3<<2)+(0<<0),
+                                         (1<<6)+(2<<4)+(0<<2)+(3<<0),
+                                         (1<<6)+(3<<4)+(2<<2)+(0<<0),
+                                         (1<<6)+(3<<4)+(0<<2)+(2<<0),
 
-                                     (2<<6)+(1<<4)+(0<<2)+(3<<0),
-                                     (2<<6)+(1<<4)+(3<<2)+(0<<0),
-                                     (2<<6)+(0<<4)+(3<<2)+(1<<0),
-                                     (2<<6)+(0<<4)+(1<<2)+(3<<0),
-                                     (2<<6)+(3<<4)+(0<<2)+(1<<0),
-                                     (2<<6)+(3<<4)+(1<<2)+(0<<0),
+                                         (2<<6)+(1<<4)+(0<<2)+(3<<0),
+                                         (2<<6)+(1<<4)+(3<<2)+(0<<0),
+                                         (2<<6)+(0<<4)+(3<<2)+(1<<0),
+                                         (2<<6)+(0<<4)+(1<<2)+(3<<0),
+                                         (2<<6)+(3<<4)+(0<<2)+(1<<0),
+                                         (2<<6)+(3<<4)+(1<<2)+(0<<0),
 
-                                     (3<<6)+(1<<4)+(2<<2)+(0<<0),
-                                     (3<<6)+(1<<4)+(0<<2)+(2<<0),
-                                     (3<<6)+(2<<4)+(0<<2)+(1<<0),
-                                     (3<<6)+(2<<4)+(1<<2)+(0<<0),
-                                     (3<<6)+(0<<4)+(2<<2)+(1<<0),
-                                     (3<<6)+(0<<4)+(1<<2)+(2<<0)};
+                                         (3<<6)+(1<<4)+(2<<2)+(0<<0),
+                                         (3<<6)+(1<<4)+(0<<2)+(2<<0),
+                                         (3<<6)+(2<<4)+(0<<2)+(1<<0),
+                                         (3<<6)+(2<<4)+(1<<2)+(0<<0),
+                                         (3<<6)+(0<<4)+(2<<2)+(1<<0),
+                                         (3<<6)+(0<<4)+(1<<2)+(2<<0)};
 
 void print_instructions( instruction_t *instructions, int num_instructions, int debug )
 {
@@ -185,200 +187,130 @@ void print_instructions( instruction_t *instructions, int num_instructions, int 
                 printf("m%d", instr->operands[1]);
             else
                 printf("0x%x", allowedshuf[instr->operands[1] - NUMREGS]);
-        } else if(instr->opcode < PSHUFLW ) {
-            printf(" m%d, ", instr->operands[0]);
-            if (instr->opcode >= PSLLQ && instr->operands[1] < NUMREGS)
-                printf("m%d", instr->operands[1]);
-            else if (instr->opcode < PSLLQ)
-                printf("%d", instr->operands[1]);
-            else
-                printf("%d", instr->operands[1] - NUMREGS);
-        }
-        else                    printf(" m%d, m%d, 0x%x", instr->operands[0], instr->operands[1], instr->operands[2] );
+        } else if(instr->opcode < PSHUFLW)  printf(" m%d, %d", instr->operands[0], instr->operands[2]);
+        else                                printf(" m%d, m%d, 0x%x", instr->operands[0], instr->operands[1], instr->operands[2] );
         if (debug && instr->flags) printf(" *");
         printf("\n");
     }
 }
 
-void execute_instruction( uint8_t *instr )
+void execute_instruction( instruction_t instr )
 {
-    uint8_t *input1 = registers[instr[1]];
-    uint8_t *input2 = registers[instr[2]];
-    uint8_t *output = registers[instr[3]];
-    uint8_t temp[8];
+    uint16_t *input1 = registers[instr.operands[1]];
+//     uint8_t *input2 = registers[instr->operands[2]];
+    uint16_t *output = registers[instr.operands[0]];
+    uint16_t temp[8];
     int i;
-    int imm = instr[2];
+    int imm = instr.operands[2];
 
-    switch( instr[0] )
+    switch( instr.opcode )
     {
         case PUNPCKLWD:
-            temp[0] = input1[0];
-            temp[2] = input1[1];
-            temp[4] = input1[2];
-            temp[6] = input1[3];
-            temp[1] = input2[0];
-            temp[3] = input2[1];
-            temp[5] = input2[2];
-            temp[7] = input2[3];
+            temp[0] = output[0];
+            temp[2] = output[1];
+            temp[4] = output[2];
+            temp[6] = output[3];
+            temp[1] = input1[0];
+            temp[3] = input1[1];
+            temp[5] = input1[2];
+            temp[7] = input1[3];
             break;
         case PUNPCKHWD:
-            temp[0] = input1[4];
-            temp[2] = input1[5];
-            temp[4] = input1[6];
-            temp[6] = input1[7];
-            temp[1] = input2[4];
-            temp[3] = input2[5];
-            temp[5] = input2[6];
-            temp[7] = input2[7];
+            temp[0] = output[4];
+            temp[2] = output[5];
+            temp[4] = output[6];
+            temp[6] = output[7];
+            temp[1] = input1[4];
+            temp[3] = input1[5];
+            temp[5] = input1[6];
+            temp[7] = input1[7];
             break;
         case PUNCPKLDQ:
-            temp[0] = input1[0];
-            temp[1] = input1[1];
-            temp[4] = input1[2];
-            temp[5] = input1[3];
-            temp[2] = input2[0];
-            temp[3] = input2[1];
-            temp[6] = input2[2];
-            temp[7] = input2[3];
+            temp[0] = output[0];
+            temp[1] = output[1];
+            temp[4] = output[2];
+            temp[5] = output[3];
+            temp[2] = input1[0];
+            temp[3] = input1[1];
+            temp[6] = input1[2];
+            temp[7] = input1[3];
             break;
         case PUNPCKHDQ:
-            temp[0] = input1[4];
-            temp[1] = input1[5];
-            temp[4] = input1[6];
-            temp[5] = input1[7];
-            temp[2] = input2[4];
-            temp[3] = input2[5];
-            temp[6] = input2[6];
-            temp[7] = input2[7];
+            temp[0] = output[4];
+            temp[1] = output[5];
+            temp[4] = output[6];
+            temp[5] = output[7];
+            temp[2] = input1[4];
+            temp[3] = input1[5];
+            temp[6] = input1[6];
+            temp[7] = input1[7];
             break;
         case PUNPCKLQDQ:
-            temp[0] = input1[0];
-            temp[1] = input1[1];
-            temp[2] = input1[2];
-            temp[3] = input1[3];
-            temp[4] = input2[0];
-            temp[5] = input2[1];
-            temp[6] = input2[2];
-            temp[7] = input2[3];
+            temp[0] = output[0];
+            temp[1] = output[1];
+            temp[2] = output[2];
+            temp[3] = output[3];
+            temp[4] = input1[0];
+            temp[5] = input1[1];
+            temp[6] = input1[2];
+            temp[7] = input1[3];
             break;
         case PUNPCKHQDQ:
-            temp[0] = input1[4];
-            temp[1] = input1[5];
-            temp[2] = input1[6];
-            temp[3] = input1[7];
-            temp[4] = input2[4];
-            temp[5] = input2[5];
-            temp[6] = input2[6];
-            temp[7] = input2[7];
+            temp[0] = output[4];
+            temp[1] = output[5];
+            temp[2] = output[6];
+            temp[3] = output[7];
+            temp[4] = input1[4];
+            temp[5] = input1[5];
+            temp[6] = input1[6];
+            temp[7] = input1[7];
             break;
         case PSLLDQ:
-            for( i = 0; i < imm; i++ )
-                temp[i] = input1[i+imm];
-            for( i = imm; i < 8; i++ )
-                temp[i] = 64;
+            if (imm > 8) imm = 8;
+            for( i = 0; i < 8 - imm; i++ )
+                temp[i] = output[i+imm];
+            for( ; i < 8; i++ )
+                temp[i] = 0;
             break;
         case PSRLDQ:
+            if (imm > 8) imm = 8;
             for( i = 0; i < imm; i++ )
-                temp[i] = 64;
-            for( i = imm; i < 8; i++ )
+                temp[i] = 0;
+            for( ; i < 8; i++ )
                 temp[i] = input1[i-imm];
             break;
         case PSLLQ:
-            if( imm == 1 )
-            {
-                temp[0] = input1[1];
-                temp[1] = input1[2];
-                temp[2] = input1[3];
-                temp[3] = 64;
-                temp[4] = input1[5];
-                temp[5] = input1[6];
-                temp[6] = input1[7];
-                temp[7] = 64;
-            }
-            else if( imm == 2 )
-            {
-                temp[0] = input1[2];
-                temp[1] = input1[3];
-                temp[2] = 64;
-                temp[3] = 64;
-                temp[4] = input1[6];
-                temp[5] = input1[7];
-                temp[6] = 64;
-                temp[7] = 64;
-            }
-            else if( imm == 3 )
-            {
-                temp[0] = input1[3];
-                temp[1] = 64;
-                temp[2] = 64;
-                temp[3] = 64;
-                temp[4] = input1[7];
-                temp[5] = 64;
-                temp[6] = 64;
-                temp[7] = 64;
-            }
-            else
-                assert(0);
+        {
+            uint64_t *in64 = (uint64_t*)output;
+            if (imm > 64) imm = 64;
+            in64[0] <<= imm;
+            in64[1] <<= imm;
             break;
+        }
         case PSRLQ:
-            if( imm == 1 )
-            {
-                temp[0] = 64;
-                temp[1] = input1[0];
-                temp[2] = input1[1];
-                temp[3] = input1[2];
-                temp[4] = 64;
-                temp[5] = input1[4];
-                temp[6] = input1[5];
-                temp[7] = input1[6];
-            }
-            else if( imm == 2 )
-            {
-                temp[0] = 64;
-                temp[1] = 64;
-                temp[2] = input1[0];
-                temp[3] = input1[1];
-                temp[4] = 64;
-                temp[5] = 64;
-                temp[6] = input1[0];
-                temp[7] = input1[1];
-            }
-            else if( imm == 3 )
-            {
-                temp[0] = 64;
-                temp[1] = 64;
-                temp[2] = 64;
-                temp[3] = input1[0];
-                temp[4] = 64;
-                temp[5] = 64;
-                temp[6] = 64;
-                temp[7] = input1[0];
-            }
-            else
-                assert(0);
+        {
+            uint64_t *in64 = (uint64_t*)output;
+            if (imm > 64) imm = 64;
+            in64[0] >>= imm;
+            in64[1] >>= imm;
             break;
+        }
         case PSLLD:
-            assert( imm == 1 );
-            temp[0] = input1[1];
-            temp[1] = 64;
-            temp[2] = input1[3];
-            temp[3] = 64;
-            temp[4] = input1[5];
-            temp[5] = 64;
-            temp[6] = input1[7];
-            temp[7] = 64;
+        {
+            uint32_t *in32 = (uint32_t*)output;
+            if (imm > 32) imm = 32;
+            for(i = 0; i < 4; i++)
+                in32[i] <<= imm;
             break;
+        }
         case PSRLD:
-            assert( imm == 1 );
-            temp[0] = 64;
-            temp[1] = input1[0];
-            temp[2] = 64;
-            temp[3] = input1[2];
-            temp[4] = 64;
-            temp[5] = input2[4];
-            temp[6] = 64;
-            temp[7] = input2[6];
+        {
+            uint32_t *in32 = (uint32_t*)output;
+            if (imm > 32) imm = 32;
+            for(i = 0; i < 4; i++)
+                in32[i] >>= imm;
             break;
+        }
         case PSHUFLW:
             temp[0] = input1[imm&0x3]; imm >>= 2;
             temp[1] = input1[imm&0x3]; imm >>= 2;
@@ -396,15 +328,15 @@ void execute_instruction( uint8_t *instr )
                 temp[i] = input1[i];
             break;
         default:
-            fprintf( stderr, "Error: unsupported instruction %d %d %d %d!\n", instr[0], instr[1], instr[2], instr[3]);
+            fprintf( stderr, "Error: unsupported instruction %d %d %d %d!\n", instr.opcode, instr.operands[0], instr.operands[1], instr.operands[2]);
             assert(0);
     }
-    for( i = 0; i < 8; i++ )
-    {
-        counter[output[i]]--;
-        counter[temp[i]]++;
-    }
-    memcpy( output, temp, 8*sizeof(uint8_t) );
+//     for( i = 0; i < 8; i++ )
+//     {
+//         counter[output[i]]--;
+//         counter[temp[i]]++;
+//     }
+    memcpy( output, temp, 8*sizeof(output[0]) );
 }
 
 void init_resultregisters()
@@ -419,7 +351,7 @@ void init_srcregisters()
 {
     int r, i;
     for(r = 0; r < 2; r++)
-        memcpy(srcregisters[r], &coeffs[r*8], sizeof(uint8_t) * 8);
+        memcpy(srcregisters[r], &coeffs[r*8], sizeof(coeffs[0]) * 8);
     for(; r < NUMREGS; r++)
         memset(srcregisters[r], 0, sizeof(srcregisters[r][0]) * 8);
 }
@@ -437,23 +369,24 @@ void init_programs(program_t *programs)
         for(int j = 0; j < program->length; j++) {
             int instr = rand() % NUM_INSTR;
             int output = rand() % NUMREGS;
-            int input1, input2 = 0;
+            int input1 = NUMREGS, input2 = 0;
             instruction_t *instruction = &program->instructions[j];
 
             /* FIXME: This should be completely random, instead of the guided randomnes we have below.
              * This may help generate more valid code, however.
              */
+            input1 = rand() % NUMREGS;
             if( instr < PSLLDQ )
-                input1 = rand() % NUMREGS;
+                input2 = rand() % UINT8_MAX;
             else if( instr < PSLLQ )
-                input1 = rand() % 16;
+                input2 = (rand() % 7) + 1;
             else if( instr < PSLLD )
-                input1 = rand() % (NUMREGS + 64);
+                input2 = rand() % 64;
             else if( instr < PSHUFLW )
-                input1 = rand() % (NUMREGS + 32);
+                input2 = rand() % 32;
             else {
-                input1 = rand() % NUMREGS;
-                input2 = allowedshuf[rand() % 24];
+//                 input2 = allowedshuf[rand() % 24];
+                input2 = rand() % UINT8_MAX;
             }
 
             instruction->opcode = instr;
@@ -471,6 +404,7 @@ void get_effective_program(program_t *in, program_t *out)
     int j;
 
     reg_eff[0] = 1;
+    reg_eff[1] = 1;
     /* We want our results in r0-r7. For 4x4 DCT, we only need one result register. */
     while(i >= 0 && in->instructions[i].operands[0] != 0) {
         in->instructions[i].flags = 0;
@@ -487,8 +421,10 @@ void get_effective_program(program_t *in, program_t *out)
         if (!instr->flags)
             continue;
         if (instr->operands[1] < NUMREGS &&
-            (instr->opcode != PSLLDQ && instr->opcode != PSRLDQ))
+            (instr->opcode < PSLLDQ || instr->opcode > PSRLD))
             reg_eff[instr->operands[1]] = 1;
+        if (instr->opcode >= PSHUFLW)
+            reg_eff[instr->operands[0]] = 0;
     }
 
     for(j = i = 0; i < in->length; i++) {
@@ -499,15 +435,21 @@ void get_effective_program(program_t *in, program_t *out)
     }
     out->length = j;
 }
-#if 0
+
 int run_program( program_t *program, int debug )
 {
     int i,r,j;
 
     init_registers();
-    memset( counter, 1, sizeof( counter ) );
+//     memset( counter, 1, sizeof( counter ) );
     if( debug )
     {
+        printf("sourceregs: \n");
+        for(r=0; r<8; r++) {
+            for(j=0; j<8; j++)
+                printf("%d ", srcregisters[r][j]);
+            printf("\n");
+        }
         printf("targetregs: \n");
         for(r=0;r<8;r++)
         {
@@ -516,7 +458,7 @@ int run_program( program_t *program, int debug )
             printf("\n");
         }
     }
-    for( i = 0; i < num_instructions; i++ )
+    for( i = 0; i < program->length; i++ )
     {
         if(debug)
         {
@@ -528,36 +470,36 @@ int run_program( program_t *program, int debug )
                 printf("\n");
             }
         }
-        execute_instruction( instructions[i] );
+        execute_instruction( program->instructions[i] );
         //for( i = 0; i < 64; i++ )
           //  if( !counter[i] ) return 0;
     }
     return 1;
 }
-#endif
+
 //#define CHECK_LOC if( i >= 2 && i <= 5 ) continue;
 #define CHECK_LOC if( 0 ) continue;
 
 int result_cost( int *correct )
 {
     //static const int errorcosts[9] = { 0, 7, 14, 21, 27, 32, 36, 39, 40 };
-    static const int errorcosts[9] = { 0, 80, 110, 121, 127, 132, 136, 139, 140 };
-    static const int weight[8] = { 2, 3, 4, 5, 5, 4, 3, 2 };
+//     static const int errorcosts[9] = { 0, 80, 110, 121, 127, 132, 136, 139, 140 };
+//     static const int weight[8] = { 2, 3, 4, 5, 5, 4, 3, 2 };
     int sumerror = 0;
     int ssderror = 0;
-    int i,j;
-    for( i = 0; i < 8; i++ )
+
+    for( int r = 0; r < 2; r++ )
     {
         CHECK_LOC
         int regerror = 0;
-        for( j = 0; j < 8; j++ )
-            regerror += registers[i][j] != resultregisters[i][j];
+        for(int i = 0; i < 8; i++ )
+            regerror += registers[r][i] != resultregisters[r][i];
         sumerror += regerror;
-        //ssderror += regerror*regerror;
-        ssderror += errorcosts[regerror] * weight[i];
+        ssderror += regerror*regerror;
+//         ssderror += errorcosts[regerror] * weight[i];
     }
     *correct = 64 - sumerror;
-    return ssderror;
+    return sumerror*sumerror;
 }
 
 void result_cost_breakdown()
@@ -655,6 +597,24 @@ int generate_algorithm( uint8_t (*instructions)[4], uint8_t (*srcinstructions)[4
     }
 }
 
+void mutate_program( program_t *prog, float probabilities[3] )
+{
+    int p = rand();
+    instruction_t *instr = &prog->instructions[rand() % prog->length];
+    if(p < RAND_MAX * probabilities[0])                                 /* Modify an instruction */
+        instr->opcode = rand() % NUM_INSTR;
+    else if (p < RAND_MAX * (probabilities[0] + probabilities[1])) {    /* Modify a regester */
+        if (rand() < RAND_MAX / 2)
+            instr->operands[0] = rand() % NUMREGS;
+        else
+            instr->operands[1] = rand() % NUMREGS;
+    } else                                                              /* Modify a constant */
+        instr->operands[2] = rand() % UINT8_MAX;
+
+    /* Invalidate existing cost */
+    prog->cost = INT_MAX;
+}
+
 int instruction_cost( uint8_t (*instructions)[4], int numinstructions )
 {
     int i;
@@ -678,6 +638,12 @@ int main()
     int t, i;
 
     int ltime;
+    program_t eff_prog;
+    int correct;
+    int bcost = INT_MAX;
+    int wcost = 0;
+    int bprog, wprog;
+    float probabilities[3] = { 0.4, 0.4, 0.2 };
 //     int temperature = STARTTEMP;
 //     int gototemp = STARTTEMP;
 //     int iterations_since_change = 0;
@@ -693,14 +659,32 @@ int main()
     init_resultregisters();
     init_programs(programs);
 
-    for(i = 0; i < NUM_PROGRAMS; i++) {
-        program_t eff_prog;
 
-        get_effective_program(&programs[i], &eff_prog);
+    for(int i = 0; i < NUM_PROGRAMS; i++) {
+        program_t *prog = &programs[i];
+//         print_instructions(eff_prog.instructions, eff_prog.length, 1);
+        get_effective_program(prog, &eff_prog);
+        run_program(&eff_prog, 0);
+        prog->cost = result_cost(&correct);
+        if (prog->cost < bcost) {
+            bcost = prog->cost;
+            bprog = i;
+        }
+        if (prog->cost > wcost) {
+            wcost = prog->cost;
+            wprog = i;
+        }
 
-        print_instructions(eff_prog.instructions, eff_prog.length, 1);
-        printf("\n");
+        printf("cost = %d\n", prog->cost);
     }
+
+    /* Best program replaces the worst, with a random chance at mutation */
+    memcpy(&programs[wprog], &programs[bprog], sizeof(programs[0]));
+    mutate_program(&programs[wprog], probabilities);
+    get_effective_program(&programs[wprog], &eff_prog);
+    run_program(&eff_prog, 0);
+    programs[wprog].cost = result_cost(&correct);
+    run_tournament(programs, 4);
 #if 0
     for( i = 0; i < ITERATIONS; i++ )
     {
