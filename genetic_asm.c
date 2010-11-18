@@ -36,6 +36,12 @@ typedef struct program {
     instruction_t effective[MAX_INSTR];
 } program_t;
 
+typedef union simd16x4 {
+    uint64_t a;
+    uint32_t b[2];
+    uint16_t c[4];
+} simd16x4_t;
+
 #define ZIG(i,y,x) levels[i] = coeffs[x*8+y];
 
 void init_levels_8x8()
@@ -302,34 +308,60 @@ void execute_instruction( instruction_t instr )
             break;
         case PSLLQ:
         {
-            uint64_t *in64 = (uint64_t*)output;
+            simd16x4_t tmp;
+
             if (imm > 64) imm = 64;
-            in64[0] <<= imm;
-            in64[1] <<= imm;
+            for (int i = 0; i < 2; i++) {
+                for (int j = 0; j < 4; j++)
+                    tmp.c[j] = output[i*4+j];
+                tmp.a <<= imm;
+                for (int j = 0; j < 4; j++)
+                    temp[i*4+j] = tmp.c[j];
+            }
             break;
         }
         case PSRLQ:
         {
-            uint64_t *in64 = (uint64_t*)output;
+            simd16x4_t tmp;
+
             if (imm > 64) imm = 64;
-            in64[0] >>= imm;
-            in64[1] >>= imm;
+            for (int i = 0; i < 2; i++) {
+                for (int j = 0; j < 4; j++)
+                    tmp.c[j] = output[i*4+j];
+                tmp.a >>= imm;
+                for (int j = 0; j < 4; j++)
+                    temp[i*4+j] = tmp.c[j];
+            }
             break;
         }
         case PSLLD:
         {
-            uint32_t *in32 = (uint32_t*)output;
+            simd16x4_t tmp;
+
             if (imm > 32) imm = 32;
-            for(i = 0; i < 4; i++)
-                in32[i] <<= imm;
+            for (int i = 0; i < 2; i++) {
+                for (int j = 0; j < 4; j++)
+                    tmp.c[j] = output[i*4+j];
+                for (int j = 0; j < 2; j++)
+                    tmp.b[j] <<= imm;
+                for (int j = 0; j < 4; j++)
+                    temp[i*4+j] = tmp.c[j];
+            }
             break;
         }
         case PSRLD:
         {
-            uint32_t *in32 = (uint32_t*)output;
+            simd16x4_t tmp;
+
             if (imm > 32) imm = 32;
-            for(i = 0; i < 4; i++)
-                in32[i] >>= imm;
+            for (int i = 0; i < 2; i++) {
+                for (int j = 0; j < 4; j++)
+                    tmp.c[j] = output[i*4+j];
+                for (int j = 0; j < 2; j++)
+                    tmp.b[j] >>= imm;
+                for (int j = 0; j < 4; j++)
+                    temp[i*4+j] = tmp.c[j];
+            }
             break;
         }
         case PSHUFLW:
