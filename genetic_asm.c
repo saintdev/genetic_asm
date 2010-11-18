@@ -208,6 +208,7 @@ void print_program( program_t *program, int debug )
 {
     printf("length (absolute effective) = %d %d\n", program->length[LEN_ABSOLUTE], program->length[LEN_EFFECTIVE]);
     printf("fitness = %d\n", program->fitness);
+    printf("cost = %d\n", program->cost);
     print_instructions(program, debug);
     printf("\n");
 }
