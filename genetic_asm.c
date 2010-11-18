@@ -378,7 +378,7 @@ void init_resultregisters()
 
 void init_srcregisters()
 {
-    int r, i;
+    int r;
     for(r = 0; r < 2; r++)
         memcpy(srcregisters[r], &coeffs[r*8], sizeof(coeffs[0]) * 8);
     for(; r < NUMREGS; r++)
@@ -542,6 +542,7 @@ void result_cost( program_t *prog )
     prog->cost = prog->length[LEN_EFFECTIVE];
 }
 
+#if 0
 void result_cost_breakdown()
 {
     int sumerror = 0;
@@ -557,6 +558,7 @@ void result_cost_breakdown()
     }
     printf("\n");
 }
+#endif
 
 void instruction_delete( uint8_t (*instructions)[4], int loc, int numinstructions )
 {
@@ -584,6 +586,7 @@ void instruction_shift( uint8_t (*instructions)[4], int loc, int numinstructions
 
 #define MAXCHANGES 16
 
+#if 0
 int generate_algorithm( uint8_t (*instructions)[4], uint8_t (*srcinstructions)[4], int numinstructions )
 {
 
@@ -636,6 +639,7 @@ int generate_algorithm( uint8_t (*instructions)[4], uint8_t (*srcinstructions)[4
         }
     }
 }
+#endif
 
 void mutate_program( program_t *prog, float probabilities[3] )
 {
@@ -743,14 +747,10 @@ int main()
 //     int bcost = 1<<30;
 //     int binstruction_cost = 0;
 //     int bcorrect = 0;
-    int t, i;
-
     int ltime;
-    program_t eff_prog;
-    int correct;
     int fitness[2];
     int cost[2];
-    int idx[2];
+    int idx[2] = { 0 };
     float probabilities[3] = { 0.4, 0.4, 0.2 };
     program_t winners[2];
 //     int temperature = STARTTEMP;
