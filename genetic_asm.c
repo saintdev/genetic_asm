@@ -534,6 +534,13 @@ void result_fitness( program_t *prog )
     prog->fitness = sumerror*sumerror;
 }
 
+void result_cost( program_t *prog )
+{
+    /* TODO: Use instruction latency/thouroghput */
+    if (!(prog->cost = prog->length[LEN_EFFECTIVE]))
+        prog->cost = INT_MAX;
+}
+
 void result_cost_breakdown()
 {
     int sumerror = 0;
