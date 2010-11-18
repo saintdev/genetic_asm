@@ -772,6 +772,7 @@ int main()
         printf("length (absolute effective)= %d %d, ", prog->length[LEN_ABSOLUTE], prog->length[LEN_EFFECTIVE]);
         run_program(prog, 0);
         result_fitness(prog);
+        result_cost(prog);
         if (prog->fitness < fitness[0]) {
             fitness[0] = prog->fitness;
             idx[0] = i;
@@ -790,6 +791,7 @@ int main()
     effective_program(&programs[idx[1]]);
     run_program(&programs[idx[1]], 0);
     result_fitness(&programs[idx[1]]);
+    result_cost(&programs[idx[1]]);
     printf("fitness = %d\n", programs[idx[1]].fitness);
     while (fitness[0] > 0) {
         run_tournament(programs, &winners[0], 8);
@@ -803,6 +805,7 @@ int main()
             effective_program(&winners[i]);
             run_program(&winners[i], 0);
             result_fitness(&winners[i]);
+            result_cost(&winners[i]);
 //             printf("cost = %d\n", winners[i].cost);
         }
         for (int j = 0; j < 2; j++) {
