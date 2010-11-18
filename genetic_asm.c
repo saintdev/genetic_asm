@@ -7,24 +7,18 @@
 #include <string.h>
 #include <limits.h>
 
-#define NUMREGS 16
+#define NUM_REGS 16
 #define MAX_INSTR 500
 #define NUM_PROGRAMS 100
-
-#define TRIES 1000000
-#define ITERATIONS 1000000
-#define WEIGHT 20
-#define STARTTEMP 100
-
 #define LEN_ABSOLUTE  0
 #define LEN_EFFECTIVE 1
 
 static uint16_t levels[8*8];
 static uint16_t coeffs[8*8];
 
-static uint16_t srcregisters[NUMREGS][8];
+static uint16_t srcregisters[NUM_REGS][8];
 static uint16_t resultregisters[8][8];
-static uint16_t registers[NUMREGS][8];
+static uint16_t registers[NUM_REGS][8];
 // static uint8_t counter[65];
 
 typedef struct instruction {
@@ -133,7 +127,6 @@ static const uint8_t allowedshuf[24] = { (0<<6)+(1<<4)+(2<<2)+(3<<0),
 
 void print_instruction( instruction_t *instr, int debug )
 {
-//         if( instr->opcode != PSHUFLW && instr->opcode != PSHUFHW && instr->operands[1] != instr->operands[0] ) printf("movdqa m%d, m%d\n", instr[3], instr[1] );
     switch( instr->opcode ) {
         case PUNPCKLWD:
             printf( "punpcklwd" );
@@ -186,10 +179,10 @@ void print_instruction( instruction_t *instr, int debug )
     }
     if(instr->opcode < PSLLDQ ) {
                                         printf(" m%d, ", instr->operands[0]);
-        if (instr->operands[1] < NUMREGS)
+        if (instr->operands[1] < NUM_REGS)
                                         printf("m%d", instr->operands[1]);
         else
-                                        printf("0x%x", allowedshuf[instr->operands[1] - NUMREGS]);
+                                        printf("0x%x", allowedshuf[instr->operands[1] - NUM_REGS]);
     } else if(instr->opcode < PSHUFLW)  printf(" m%d, %d", instr->operands[0], instr->operands[2]);
     else                                printf(" m%d, m%d, 0x%x", instr->operands[0], instr->operands[1], instr->operands[2] );
     if (debug && instr->flags)          printf(" *");
@@ -216,7 +209,6 @@ void print_program( program_t *program, int debug )
 void execute_instruction( instruction_t instr )
 {
     uint16_t *input1 = registers[instr.operands[1]];
-//     uint8_t *input2 = registers[instr->operands[2]];
     uint16_t *output = registers[instr.operands[0]];
     uint16_t temp[8];
     int i;
@@ -360,11 +352,7 @@ void execute_instruction( instruction_t instr )
             fprintf( stderr, "Error: unsupported instruction %d %d %d %d!\n", instr.opcode, instr.operands[0], instr.operands[1], instr.operands[2]);
             assert(instr.opcode < NUM_INSTR);
     }
-//     for( i = 0; i < 8; i++ )
-//     {
-//         counter[output[i]]--;
-//         counter[temp[i]]++;
-//     }
+
     memcpy( output, temp, 8*sizeof(output[0]) );
 }
 
@@ -381,7 +369,7 @@ void init_srcregisters()
     int r;
     for(r = 0; r < 2; r++)
         memcpy(srcregisters[r], &coeffs[r*8], sizeof(coeffs[0]) * 8);
-    for(; r < NUMREGS; r++)
+    for(; r < NUM_REGS; r++)
         memset(srcregisters[r], 0, sizeof(srcregisters[r][0]) * 8);
 }
 
@@ -397,14 +385,14 @@ void init_programs(program_t *programs)
         program->length[LEN_ABSOLUTE] = (rand() % (51)) + 5;
         for(int j = 0; j < program->length[LEN_ABSOLUTE]; j++) {
             int instr = rand() % NUM_INSTR;
-            int output = rand() % NUMREGS;
-            int input1 = NUMREGS, input2 = 0;
+            int output = rand() % NUM_REGS;
+            int input1 = NUM_REGS, input2 = 0;
             instruction_t *instruction = &program->instructions[j];
 
             /* FIXME: This should be completely random, instead of the guided randomnes we have below.
              * This may help generate more valid code, however.
              */
-            input1 = rand() % NUMREGS;
+            input1 = rand() % NUM_REGS;
             if( instr < PSLLDQ )
                 input2 = rand() % UINT8_MAX;
             else if( instr < PSLLQ )
@@ -429,7 +417,7 @@ void init_programs(program_t *programs)
 
 void effective_program(program_t *prog)
 {
-    uint8_t reg_eff[NUMREGS] = {0};
+    uint8_t reg_eff[NUM_REGS] = {0};
     int i = prog->length[LEN_ABSOLUTE] - 1;
     int j;
 
@@ -444,7 +432,7 @@ void effective_program(program_t *prog)
         instruction_t *instr = &prog->instructions[i];
 
         instr->flags = 0;
-        for (j = 0; j < NUMREGS; j++)
+        for (j = 0; j < NUM_REGS; j++)
             if (reg_eff[j] && instr->operands[0] == j)
                 instr->flags = 1;
 
@@ -452,7 +440,7 @@ void effective_program(program_t *prog)
             continue;
         if (instr->opcode >= PSHUFLW || instr->opcode == MOVDQA)
             reg_eff[instr->operands[0]] = 0;
-        if (instr->operands[1] < NUMREGS &&
+        if (instr->operands[1] < NUM_REGS &&
             (instr->opcode < PSLLDQ || instr->opcode > PSRLD))
             reg_eff[instr->operands[1]] = 1;
     }
@@ -471,7 +459,6 @@ int run_program( program_t *program, int debug )
     int i,r,j;
 
     init_registers();
-//     memset( counter, 1, sizeof( counter ) );
     if( debug ) {
 //         printf("sourceregs: \n");
 //         for(r=0; r<8; r++) {
@@ -487,11 +474,10 @@ int run_program( program_t *program, int debug )
         }
     }
     for( i = 0; i < program->length[LEN_EFFECTIVE]; i++ ) {
-/*        if(debug)
-        {
+/*
+        if(debug) {
             printf("regs: \n");
-            for(r=0;r<NUMREGS;r++)
-            {
+            for(r=0;r<NUM_REGS;r++) {
                 for(j=0;j<8;j++)
                     printf("%d ",registers[r][j]);
                 printf("\n");
@@ -499,12 +485,10 @@ int run_program( program_t *program, int debug )
         }
 */
         execute_instruction( program->effective[i] );
-        //for( i = 0; i < 64; i++ )
-          //  if( !counter[i] ) return 0;
     }
     if(debug) {
         printf("resultregs: \n");
-        for(r=0;r<NUMREGS;r++) {
+        for(r=0;r<NUM_REGS;r++) {
             for(j=0;j<8;j++)
                 printf("%d ",registers[r][j]);
             printf("\n");
@@ -518,19 +502,13 @@ int run_program( program_t *program, int debug )
 
 void result_fitness( program_t *prog )
 {
-    //static const int errorcosts[9] = { 0, 7, 14, 21, 27, 32, 36, 39, 40 };
-//     static const int errorcosts[9] = { 0, 80, 110, 121, 127, 132, 136, 139, 140 };
-//     static const int weight[8] = { 2, 3, 4, 5, 5, 4, 3, 2 };
     int sumerror = 0;
-//     int ssderror = 0;
 
     for( int r = 0; r < 2; r++ ) {
         int regerror = 0;
         for(int i = 0; i < 8; i++ )
             regerror += registers[r][i] != resultregisters[r][i];
         sumerror += regerror;
-//         ssderror += regerror*regerror;
-//         ssderror += errorcosts[regerror] * weight[i];
     }
 
     prog->fitness = sumerror*sumerror;
@@ -541,24 +519,6 @@ void result_cost( program_t *prog )
     /* TODO: Use instruction latency/thouroghput */
     prog->cost = prog->length[LEN_EFFECTIVE];
 }
-
-#if 0
-void result_cost_breakdown()
-{
-    int sumerror = 0;
-    int i,j;
-    printf("Regerror breakdown: ");
-    for( i = 0; i < 8; i++ )
-    {
-        CHECK_LOC
-        int regerror = 0;
-        for( j = 0; j < 8; j++ )
-            regerror += registers[i][j] != resultregisters[i][j];
-        printf("%d ",regerror);
-    }
-    printf("\n");
-}
-#endif
 
 void instruction_delete( uint8_t (*instructions)[4], int loc, int numinstructions )
 {
@@ -584,63 +544,6 @@ void instruction_shift( uint8_t (*instructions)[4], int loc, int numinstructions
     }
 }
 
-#define MAXCHANGES 16
-
-#if 0
-int generate_algorithm( uint8_t (*instructions)[4], uint8_t (*srcinstructions)[4], int numinstructions )
-{
-
-    memcpy( instructions, srcinstructions, numinstructions * sizeof(uint8_t) * 4 );
-    int numchanges = rand() % MAXCHANGES;
-    int i;
-    for( i = 0; i < numchanges; i++ )
-    {
-        int change = rand() % 4;
-        int instr = rand() % NUM_INSTR;
-        int input1 = rand() % NUMREGS;
-        int input2;
-        if( instr < PSLLDQ )
-            input2 = rand() % NUMREGS;
-        else if( instr < PSLLQ )
-            input2 = (rand() % 7) + 1;
-        else if( instr < PSLLD )
-            input2 = (rand() % 3) + 1;
-        else if( instr < PSHUFLW )
-            input2 = 1;
-        else
-            input2 = allowedshuf[rand() % 24];
-
-        int output = rand() % NUMREGS;
-        int loc = rand() & 1 ? rand() % (numinstructions+1) : numinstructions;
-        if(loc == numinstructions) change=1;
-        switch( change )
-        {
-            case 0: //delete instruction
-            if( numinstructions == 0 ) continue;
-            instruction_delete( instructions, loc, numinstructions );
-            numinstructions--;
-            break;
-            case 1:
-            case 2: //add instruction
-            if( numinstructions == MAX_INSTR ) continue;
-            instruction_shift( instructions, loc, numinstructions );
-            numinstructions++;
-            instructions[loc][0] = instr;
-            instructions[loc][1] = input1;
-            instructions[loc][2] = input2;
-            instructions[loc][3] = output;
-            break;
-            case 3: //change instruction
-            instructions[loc][0] = instr;
-            instructions[loc][1] = input1;
-            instructions[loc][2] = input2;
-            instructions[loc][3] = output;
-            break;
-        }
-    }
-}
-#endif
-
 void mutate_program( program_t *prog, float probabilities[3] )
 {
     int p = rand();
@@ -650,9 +553,9 @@ void mutate_program( program_t *prog, float probabilities[3] )
         instr->opcode = rand() % NUM_INSTR;
     else if (p < RAND_MAX * (probabilities[0] + probabilities[1])) {    /* Modify a regester */
         if (rand() < RAND_MAX / 2)
-            instr->operands[0] = rand() % NUMREGS;
+            instr->operands[0] = rand() % NUM_REGS;
         else
-            instr->operands[1] = rand() % NUMREGS;
+            instr->operands[1] = rand() % NUM_REGS;
     } else                                                              /* Modify a constant */
         instr->operands[2] = rand() % UINT8_MAX;
 
@@ -688,7 +591,6 @@ void run_tournament( program_t *programs, program_t *winner, int size)
         }
     }
     do {
-//         printf("size = %d\n", size);
         for(int i = 0; i < size-1; i += (2 << shift)) {
             program_t *a = &programs[contestants[i]];
             program_t *b = &programs[contestants[i + (1<<shift)]];
@@ -742,22 +644,12 @@ void crossover( program_t *parents, int delta_length, int delta_pos )
 int main()
 {
     program_t programs[NUM_PROGRAMS];
-//     static uint8_t binstructions[MAX_INSTR][4] = {0};
-//     int num_binstructions = 0;
-//     int bcost = 1<<30;
-//     int binstruction_cost = 0;
-//     int bcorrect = 0;
     int ltime;
     int fitness[2];
     int cost[2];
     int idx[2] = { 0 };
     float probabilities[3] = { 0.4, 0.4, 0.2 };
     program_t winners[2];
-//     int temperature = STARTTEMP;
-//     int gototemp = STARTTEMP;
-//     int iterations_since_change = 0;
-//     int oldbestbcost = 1<<30;
-//     int bestbcost = 1<<30;
 
     /* get the current calendar time */
     ltime = time(NULL);
@@ -776,7 +668,6 @@ int main()
 
     for(int i = 0; i < NUM_PROGRAMS; i++) {
         program_t *prog = &programs[i];
-//         print_instructions(eff_prog.instructions, eff_prog.length, 1);
         effective_program(prog);
         printf("length (absolute effective)= %d %d, ", prog->length[LEN_ABSOLUTE], prog->length[LEN_EFFECTIVE]);
         run_program(prog, 0);
@@ -816,8 +707,6 @@ int main()
     while (fitness[0] > 0) {
         run_tournament(programs, &winners[0], 8);
         run_tournament(programs, &winners[1], 8);
-//         for(int i = 0; i < 2; i++)
-//             printf("cost = %d\n", winners[i].cost);
         crossover(winners, 5, 50);
         for(int i = 0; i < 2; i++) {
             if (rand() < RAND_MAX * 0.75)
@@ -826,7 +715,6 @@ int main()
             run_program(&winners[i], 0);
             result_fitness(&winners[i]);
             result_cost(&winners[i]);
-//             printf("cost = %d\n", winners[i].cost);
         }
         for (int j = 0; j < 2; j++) {
             for (int i = 0; i < NUM_PROGRAMS; i++) {
@@ -842,53 +730,10 @@ int main()
                 effective_program(&programs[i]);
                 run_program(&programs[i], 1);
                 print_program(&programs[i], 0);
-//                 printf("fitness = %d\n", programs[i].fitness);
                 printf("\n");
             }
         }
     }
 
-#if 0
-    for( i = 0; i < ITERATIONS; i++ )
-    {
-        int prevcost = bcost;
-        for( t = 0; t < TRIES; t++ )
-        {
-            num_instructions = generate_algorithm( instructions, binstructions, num_binstructions );
-            int success = run_program( instructions, num_instructions, 0 );
-            if( !success ) continue;
-            int correct;
-            int output_cost = result_cost( &correct );
-            //if( output_cost > bcost ) continue;
-            int icost = instruction_cost( instructions, num_instructions );
-            int cost = output_cost * WEIGHT + icost;
-            int weight = temperature ? rand() % temperature : 0;
-            if( cost < bcost + weight )
-            {
-                bcost = cost;
-                bcorrect = correct;
-                binstruction_cost = icost;
-                memcpy( binstructions, instructions, num_instructions * sizeof(uint8_t) * 4 );
-                num_binstructions = num_instructions;
-                if( cost < bestbcost ) bestbcost = cost;
-            }
-        }
-        printf("Correct Outputs: %d, Instructions: %d\n",bcorrect,binstruction_cost);
-        printf("Temperature: %d Iterations Since Change: %d Gototemp: %d\n",temperature,iterations_since_change, gototemp);
-        run_program( binstructions, num_binstructions, 0 );
-        result_cost_breakdown();
-        print_instructions( binstructions, num_binstructions );
-        if( temperature ) temperature--;
-        if( !temperature && prevcost == bcost ) iterations_since_change++;
-        else iterations_since_change = 0;
-        if( iterations_since_change == 100 )
-        {
-            temperature = gototemp;
-            if( bestbcost == oldbestbcost ) gototemp += 100;
-            else if( gototemp > 100 ) gototemp -= 100;
-            oldbestbcost = bestbcost;
-        }
-    }
-#endif
     return 0;
 }
