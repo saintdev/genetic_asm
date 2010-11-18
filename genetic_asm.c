@@ -358,7 +358,7 @@ void execute_instruction( instruction_t instr )
             break;
         default:
             fprintf( stderr, "Error: unsupported instruction %d %d %d %d!\n", instr.opcode, instr.operands[0], instr.operands[1], instr.operands[2]);
-            assert(0);
+            assert(instr.opcode < NUM_INSTR);
     }
 //     for( i = 0; i < 8; i++ )
 //     {
@@ -418,6 +418,7 @@ void init_programs(program_t *programs)
                 input2 = rand() % UINT8_MAX;
             }
 
+            assert(instr < NUM_INSTR);
             instruction->opcode = instr;
             instruction->operands[0] = output;
             instruction->operands[1] = input1;
@@ -538,8 +539,7 @@ void result_fitness( program_t *prog )
 void result_cost( program_t *prog )
 {
     /* TODO: Use instruction latency/thouroghput */
-    if (!(prog->cost = prog->length[LEN_EFFECTIVE]))
-        prog->cost = INT_MAX;
+    prog->cost = prog->length[LEN_EFFECTIVE];
 }
 
 void result_cost_breakdown()
@@ -652,8 +652,10 @@ void mutate_program( program_t *prog, float probabilities[3] )
     } else                                                              /* Modify a constant */
         instr->operands[2] = rand() % UINT8_MAX;
 
+    assert(instr->opcode < NUM_INSTR);
     /* Invalidate existing fitness */
     prog->fitness = INT_MAX;
+    prog->cost = 0;
 }
 
 int instruction_cost( uint8_t (*instructions)[4], int numinstructions )
@@ -689,7 +691,7 @@ void run_tournament( program_t *programs, program_t *winner, int size)
             if (a->fitness < b->fitness)
                 contestants[i] = contestants[i+(1<<shift)];
             else if (a->fitness == b->fitness)
-                if (a->cost < b->cost)
+                if (a->cost > b->cost)
                     contestants[i] = contestants[i+(1<<shift)];
         }
         shift++;
@@ -728,6 +730,7 @@ void crossover( program_t *parents, int delta_length, int delta_pos )
         }
         temp[j].length[LEN_ABSOLUTE] = point[j] + length[!j] + (parents[j].length[LEN_ABSOLUTE] - point[j] - length[j]);
         temp[j].fitness = INT_MAX;
+        temp[j].cost = 0;
     }
     memcpy(parents, temp, sizeof(*parents) *2);
 }
@@ -746,6 +749,7 @@ int main()
     program_t eff_prog;
     int correct;
     int fitness[2];
+    int cost[2];
     int idx[2];
     float probabilities[3] = { 0.4, 0.4, 0.2 };
     program_t winners[2];
@@ -761,6 +765,8 @@ int main()
 
     fitness[0] = INT_MAX;
     fitness[1] = 0;
+    cost[0] = INT_MAX;
+    cost[1] = 0;
 
     init_levels();
     init_srcregisters();
@@ -776,13 +782,24 @@ int main()
         run_program(prog, 0);
         result_fitness(prog);
         result_cost(prog);
+
         if (prog->fitness < fitness[0]) {
             fitness[0] = prog->fitness;
             idx[0] = i;
+        } else if (prog->fitness == fitness[0]) {
+            if (prog->cost && prog->cost < cost[0]) {
+                cost[0] = prog->cost;
+                idx[0] = i;
+            }
         }
         if (prog->fitness > fitness[1]) {
             fitness[1] = prog->fitness;
             idx[1] = i;
+        } else if (prog->fitness == fitness[1]) {
+            if (prog->cost > cost[1]) {
+                cost[1] = prog->cost;
+                idx[1] = i;
+            }
         }
 
         printf("fitness = %d\n", prog->fitness);
