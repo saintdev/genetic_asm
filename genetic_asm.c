@@ -688,6 +688,9 @@ void run_tournament( program_t *programs, program_t *winner, int size)
             program_t *b = &programs[contestants[i + (1<<shift)]];
             if (a->fitness < b->fitness)
                 contestants[i] = contestants[i+(1<<shift)];
+            else if (a->fitness == b->fitness)
+                if (a->cost < b->cost)
+                    contestants[i] = contestants[i+(1<<shift)];
         }
         shift++;
     } while(size >> shift > 1);
