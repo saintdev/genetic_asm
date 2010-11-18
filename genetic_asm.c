@@ -9,12 +9,15 @@
 
 #define NUMREGS 16
 #define MAX_INSTR 500
-#define NUM_PROGRAMS 32
+#define NUM_PROGRAMS 100
 
 #define TRIES 1000000
 #define ITERATIONS 1000000
 #define WEIGHT 20
 #define STARTTEMP 100
+
+#define LEN_ABSOLUTE  0
+#define LEN_EFFECTIVE 1
 
 static uint16_t levels[8*8];
 static uint16_t coeffs[8*8];
@@ -22,7 +25,7 @@ static uint16_t coeffs[8*8];
 static uint16_t srcregisters[NUMREGS][8];
 static uint16_t resultregisters[8][8];
 static uint16_t registers[NUMREGS][8];
-static uint8_t counter[65];
+// static uint8_t counter[65];
 
 typedef struct instruction {
     uint8_t opcode;
@@ -32,9 +35,11 @@ typedef struct instruction {
 } instruction_t;
 
 typedef struct program {
-    int length;
+    int length[2];  /* 0 = absolute, 1 = effective */
+    int fitness;
     int cost;
     instruction_t instructions[MAX_INSTR];
+    instruction_t effective[MAX_INSTR];
 } program_t;
 
 #define ZIG(i,y,x) levels[i] = coeffs[x*8+y];
@@ -78,23 +83,23 @@ void init_levels()
     init_levels_4x4();
 }
 
-enum instructions
-{
+enum instructions {
     PUNPCKLWD   = 0,
-    PUNPCKHWD   = 1,
-    PUNCPKLDQ   = 2,
-    PUNPCKHDQ   = 3,
-    PUNPCKLQDQ  = 4,
-    PUNPCKHQDQ  = 5,
-    PSLLDQ      = 6,
-    PSRLDQ      = 7,
-    PSLLQ       = 8,
-    PSRLQ       = 9,
-    PSLLD       = 10,
-    PSRLD       = 11,
-    PSHUFLW     = 12,
-    PSHUFHW     = 13,
-    NUM_INSTR   = 14
+    PUNPCKHWD,
+    PUNCPKLDQ,
+    PUNPCKHDQ,
+    PUNPCKLQDQ,
+    PUNPCKHQDQ,
+    MOVDQA,
+    PSLLDQ,
+    PSRLDQ,
+    PSLLQ,
+    PSRLQ,
+    PSLLD,
+    PSRLD,
+    PSHUFLW,
+    PSHUFHW,
+    NUM_INSTR
 };
 
 
@@ -126,72 +131,85 @@ static const uint8_t allowedshuf[24] = { (0<<6)+(1<<4)+(2<<2)+(3<<0),
                                          (3<<6)+(0<<4)+(2<<2)+(1<<0),
                                          (3<<6)+(0<<4)+(1<<2)+(2<<0)};
 
-void print_instructions( instruction_t *instructions, int num_instructions, int debug )
+void print_instruction( instruction_t *instr, int debug )
 {
-    int i;
-    for( i = 0; i < num_instructions; i++ )
-    {
-        instruction_t *instr = &instructions[i];
 //         if( instr->opcode != PSHUFLW && instr->opcode != PSHUFHW && instr->operands[1] != instr->operands[0] ) printf("movdqa m%d, m%d\n", instr[3], instr[1] );
-        switch( instr->opcode )
-        {
-            case PUNPCKLWD:
-                printf( "punpcklwd" );
-                break;
-            case PUNPCKHWD:
-                printf( "punpckhwd" );
-                break;
-            case PUNCPKLDQ:
-                printf( "punpckldq" );
-                break;
-            case PUNPCKHDQ:
-                printf( "punpckhdq" );
-                break;
-            case PUNPCKLQDQ:
-                printf( "punpcklqdq" );
-                break;
-            case PUNPCKHQDQ:
-                printf( "punpckhqdq" );
-                break;
-            case PSLLDQ:
-                printf( "pslldq" );
-                break;
-            case PSRLDQ:
-                printf( "psrldq" );
-                break;
-            case PSLLQ:
-                printf( "psllq" );
-                break;
-            case PSRLQ:
-                printf( "psrlq" );
-                break;
-            case PSLLD:
-                printf( "pslld" );
-                break;
-            case PSRLD:
-                printf( "psrld" );
-                break;
-            case PSHUFLW:
-                printf( "pshuflw" );
-                break;
-            case PSHUFHW:
-                printf( "pshufhw" );
-                break;
-            default:
-                fprintf( stderr, "Error: unsupported instruction!\n");
-                assert(0);
-        }
-        if(instr->opcode < PSLLDQ ) {
-            printf(" m%d, ", instr->operands[0]);
-            if (instr->operands[1] < NUMREGS)
-                printf("m%d", instr->operands[1]);
-            else
-                printf("0x%x", allowedshuf[instr->operands[1] - NUMREGS]);
-        } else if(instr->opcode < PSHUFLW)  printf(" m%d, %d", instr->operands[0], instr->operands[2]);
-        else                                printf(" m%d, m%d, 0x%x", instr->operands[0], instr->operands[1], instr->operands[2] );
-        if (debug && instr->flags) printf(" *");
+    switch( instr->opcode ) {
+        case PUNPCKLWD:
+            printf( "punpcklwd" );
+            break;
+        case PUNPCKHWD:
+            printf( "punpckhwd" );
+            break;
+        case PUNCPKLDQ:
+            printf( "punpckldq" );
+            break;
+        case PUNPCKHDQ:
+            printf( "punpckhdq" );
+            break;
+        case PUNPCKLQDQ:
+            printf( "punpcklqdq" );
+            break;
+        case PUNPCKHQDQ:
+            printf( "punpckhqdq" );
+            break;
+        case MOVDQA:
+            printf( "movdqa" );
+            break;
+        case PSLLDQ:
+            printf( "pslldq" );
+            break;
+        case PSRLDQ:
+            printf( "psrldq" );
+            break;
+        case PSLLQ:
+            printf( "psllq" );
+            break;
+        case PSRLQ:
+            printf( "psrlq" );
+            break;
+        case PSLLD:
+            printf( "pslld" );
+            break;
+        case PSRLD:
+            printf( "psrld" );
+            break;
+        case PSHUFLW:
+            printf( "pshuflw" );
+            break;
+        case PSHUFHW:
+            printf( "pshufhw" );
+            break;
+        default:
+            fprintf( stderr, "Error: unsupported instruction!\n");
+            assert(0);
+    }
+    if(instr->opcode < PSLLDQ ) {
+                                        printf(" m%d, ", instr->operands[0]);
+        if (instr->operands[1] < NUMREGS)
+                                        printf("m%d", instr->operands[1]);
+        else
+                                        printf("0x%x", allowedshuf[instr->operands[1] - NUMREGS]);
+    } else if(instr->opcode < PSHUFLW)  printf(" m%d, %d", instr->operands[0], instr->operands[2]);
+    else                                printf(" m%d, m%d, 0x%x", instr->operands[0], instr->operands[1], instr->operands[2] );
+    if (debug && instr->flags)          printf(" *");
+}
+
+void print_instructions( program_t *program, int debug )
+{
+    for( int i = 0; i < program->length[LEN_EFFECTIVE]; i++ ) {
+        instruction_t *instr = &program->effective[i];
+        print_instruction(instr, debug);
         printf("\n");
     }
+}
+
+void print_program( program_t *program, int debug )
+{
+    printf("length (absolute effective) = %d %d\n", program->length[LEN_ABSOLUTE], program->length[LEN_EFFECTIVE]);
+    printf("fitness = %d\n", program->fitness);
+    print_instructions(program, debug);
+    printf("\n");
 }
 
 void execute_instruction( instruction_t instr )
@@ -260,6 +278,16 @@ void execute_instruction( instruction_t instr )
             temp[1] = output[5];
             temp[2] = output[6];
             temp[3] = output[7];
+            temp[4] = input1[4];
+            temp[5] = input1[5];
+            temp[6] = input1[6];
+            temp[7] = input1[7];
+            break;
+        case MOVDQA:
+            temp[0] = input1[0];
+            temp[1] = input1[1];
+            temp[2] = input1[2];
+            temp[3] = input1[3];
             temp[4] = input1[4];
             temp[5] = input1[5];
             temp[6] = input1[6];
@@ -365,8 +393,8 @@ void init_programs(program_t *programs)
 {
     for(int i = 0; i < NUM_PROGRAMS; i++) {
         program_t *program = &programs[i];
-        program->length = (rand() % (MAX_INSTR - 1)) + 1;
-        for(int j = 0; j < program->length; j++) {
+        program->length[LEN_ABSOLUTE] = (rand() % (51)) + 5;
+        for(int j = 0; j < program->length[LEN_ABSOLUTE]; j++) {
             int instr = rand() % NUM_INSTR;
             int output = rand() % NUMREGS;
             int input1 = NUMREGS, input2 = 0;
@@ -397,21 +425,21 @@ void init_programs(program_t *programs)
     }
 }
 
-void get_effective_program(program_t *in, program_t *out)
+void effective_program(program_t *prog)
 {
     uint8_t reg_eff[NUMREGS] = {0};
-    int i = in->length - 1;
+    int i = prog->length[LEN_ABSOLUTE] - 1;
     int j;
 
     reg_eff[0] = 1;
     reg_eff[1] = 1;
-    /* We want our results in r0-r7. For 4x4 DCT, we only need one result register. */
-    while(i >= 0 && in->instructions[i].operands[0] != 0) {
-        in->instructions[i].flags = 0;
+    /* We want our results in r0-r7. For 4x4 DCT, we only need two result registers. */
+    while(i >= 0 && (prog->instructions[i].operands[0] != 0 && prog->instructions[i].operands[0] != 1)) {
+        prog->instructions[i].flags = 0;
         i--;
     }
     for( ; i >= 0; i--) {
-        instruction_t *instr = &in->instructions[i];
+        instruction_t *instr = &prog->instructions[i];
 
         instr->flags = 0;
         for (j = 0; j < NUMREGS; j++)
@@ -420,20 +448,20 @@ void get_effective_program(program_t *in, program_t *out)
 
         if (!instr->flags)
             continue;
+        if (instr->opcode >= PSHUFLW || instr->opcode == MOVDQA)
+            reg_eff[instr->operands[0]] = 0;
         if (instr->operands[1] < NUMREGS &&
             (instr->opcode < PSLLDQ || instr->opcode > PSRLD))
             reg_eff[instr->operands[1]] = 1;
-        if (instr->opcode >= PSHUFLW)
-            reg_eff[instr->operands[0]] = 0;
     }
 
-    for(j = i = 0; i < in->length; i++) {
-        if (!in->instructions[i].flags)
+    for(j = i = 0; i < prog->length[LEN_ABSOLUTE]; i++) {
+        if (!prog->instructions[i].flags)
             continue;
-        in->instructions[i].flags = 0;
-        out->instructions[j++] = in->instructions[i];
+        prog->instructions[i].flags = 0;
+        prog->effective[j++] = prog->instructions[i];
     }
-    out->length = j;
+    prog->length[LEN_EFFECTIVE] = j;
 }
 
 int run_program( program_t *program, int debug )
@@ -442,25 +470,22 @@ int run_program( program_t *program, int debug )
 
     init_registers();
 //     memset( counter, 1, sizeof( counter ) );
-    if( debug )
-    {
-        printf("sourceregs: \n");
-        for(r=0; r<8; r++) {
-            for(j=0; j<8; j++)
-                printf("%d ", srcregisters[r][j]);
-            printf("\n");
-        }
+    if( debug ) {
+//         printf("sourceregs: \n");
+//         for(r=0; r<8; r++) {
+//             for(j=0; j<8; j++)
+//                 printf("%d ", srcregisters[r][j]);
+//             printf("\n");
+//         }
         printf("targetregs: \n");
-        for(r=0;r<8;r++)
-        {
+        for(r=0;r<8;r++) {
             for(j=0;j<8;j++)
                 printf("%d ",resultregisters[r][j]);
             printf("\n");
         }
     }
-    for( i = 0; i < program->length; i++ )
-    {
-        if(debug)
+    for( i = 0; i < program->length[LEN_EFFECTIVE]; i++ ) {
+/*        if(debug)
         {
             printf("regs: \n");
             for(r=0;r<NUMREGS;r++)
@@ -470,9 +495,18 @@ int run_program( program_t *program, int debug )
                 printf("\n");
             }
         }
-        execute_instruction( program->instructions[i] );
+*/
+        execute_instruction( program->effective[i] );
         //for( i = 0; i < 64; i++ )
           //  if( !counter[i] ) return 0;
+    }
+    if(debug) {
+        printf("resultregs: \n");
+        for(r=0;r<NUMREGS;r++) {
+            for(j=0;j<8;j++)
+                printf("%d ",registers[r][j]);
+            printf("\n");
+        }
     }
     return 1;
 }
@@ -480,26 +514,24 @@ int run_program( program_t *program, int debug )
 //#define CHECK_LOC if( i >= 2 && i <= 5 ) continue;
 #define CHECK_LOC if( 0 ) continue;
 
-int result_cost( int *correct )
+void result_fitness( program_t *prog )
 {
     //static const int errorcosts[9] = { 0, 7, 14, 21, 27, 32, 36, 39, 40 };
 //     static const int errorcosts[9] = { 0, 80, 110, 121, 127, 132, 136, 139, 140 };
 //     static const int weight[8] = { 2, 3, 4, 5, 5, 4, 3, 2 };
     int sumerror = 0;
-    int ssderror = 0;
+//     int ssderror = 0;
 
-    for( int r = 0; r < 2; r++ )
-    {
-        CHECK_LOC
+    for( int r = 0; r < 2; r++ ) {
         int regerror = 0;
         for(int i = 0; i < 8; i++ )
             regerror += registers[r][i] != resultregisters[r][i];
         sumerror += regerror;
-        ssderror += regerror*regerror;
+//         ssderror += regerror*regerror;
 //         ssderror += errorcosts[regerror] * weight[i];
     }
-    *correct = 64 - sumerror;
-    return sumerror*sumerror;
+
+    prog->fitness = sumerror*sumerror;
 }
 
 void result_cost_breakdown()
@@ -600,7 +632,8 @@ int generate_algorithm( uint8_t (*instructions)[4], uint8_t (*srcinstructions)[4
 void mutate_program( program_t *prog, float probabilities[3] )
 {
     int p = rand();
-    instruction_t *instr = &prog->instructions[rand() % prog->length];
+    int ins_idx = rand() % prog->length[LEN_ABSOLUTE];
+    instruction_t *instr = &prog->instructions[ins_idx];
     if(p < RAND_MAX * probabilities[0])                                 /* Modify an instruction */
         instr->opcode = rand() % NUM_INSTR;
     else if (p < RAND_MAX * (probabilities[0] + probabilities[1])) {    /* Modify a regester */
@@ -611,8 +644,8 @@ void mutate_program( program_t *prog, float probabilities[3] )
     } else                                                              /* Modify a constant */
         instr->operands[2] = rand() % UINT8_MAX;
 
-    /* Invalidate existing cost */
-    prog->cost = INT_MAX;
+    /* Invalidate existing fitness */
+    prog->fitness = INT_MAX;
 }
 
 int instruction_cost( uint8_t (*instructions)[4], int numinstructions )
@@ -625,6 +658,67 @@ int instruction_cost( uint8_t (*instructions)[4], int numinstructions )
         if( instructions[i][0] != PSHUFLW && instructions[i][0] != PSHUFHW && instructions[i][1] != instructions[i][3] ) cost++;
     }
     return cost;
+}
+
+void run_tournament( program_t *programs, program_t *winner, int size)
+{
+    int contestants[NUM_PROGRAMS];
+    int shift = 0;
+
+    contestants[0] = NUM_PROGRAMS;
+    for(int i = 0; i < size; i++) {
+        contestants[i] = rand() % NUM_PROGRAMS;
+        for(int j = 0; j < i; j++) {
+            while(contestants[i] == contestants[j])
+                contestants[i] = rand() % NUM_PROGRAMS;
+        }
+    }
+    do {
+//         printf("size = %d\n", size);
+        for(int i = 0; i < size-1; i += (2 << shift)) {
+            program_t *a = &programs[contestants[i]];
+            program_t *b = &programs[contestants[i + (1<<shift)]];
+            if (a->fitness < b->fitness)
+                contestants[i] = contestants[i+(1<<shift)];
+        }
+        shift++;
+    } while(size >> shift > 1);
+    memcpy(winner, &programs[contestants[0]], sizeof(*winner));
+}
+
+void crossover( program_t *parents, int delta_length, int delta_pos )
+{
+    program_t temp[2];
+    /* FIXME: Respect delta_pos, delta_length */
+    int point[2];
+    int length[2];
+
+    for(int i = 0; i < 2; i++) {
+        point[i] = rand() % parents[i].length[LEN_ABSOLUTE];
+        length[i] = (rand() % (parents[i].length[LEN_ABSOLUTE] - point[i])) + 1;
+    }
+
+    for(int i = 0; i < 2; i++) {
+        if (point[i] + length[!i] > MAX_INSTR)
+            length[!i] = MAX_INSTR - point[i];
+        if (point[i] + length[i] > parents[i].length[LEN_ABSOLUTE])
+            length[i] = parents[i].length[LEN_ABSOLUTE] - point[i];
+    }
+
+    for(int j = 0; j < 2; j++) {
+        for(int i = 0; i < point[j]; i++) {
+            temp[j].instructions[i] = parents[j].instructions[i];
+        }
+        for(int i = 0; i < length[!j]; i++ ) {
+            temp[j].instructions[i+point[j]] = parents[!j].instructions[i+point[!j]];
+        }
+        for(int i = 0; i < parents[j].length[LEN_ABSOLUTE] - point[j] - length[j]; i++) {
+            temp[j].instructions[i+point[j]+length[!j]] = parents[j].instructions[i+point[j]+length[j]];
+        }
+        temp[j].length[LEN_ABSOLUTE] = point[j] + length[!j] + (parents[j].length[LEN_ABSOLUTE] - point[j] - length[j]);
+        temp[j].fitness = INT_MAX;
+    }
+    memcpy(parents, temp, sizeof(*parents) *2);
 }
 
 int main()
@@ -640,10 +734,10 @@ int main()
     int ltime;
     program_t eff_prog;
     int correct;
-    int bcost = INT_MAX;
-    int wcost = 0;
-    int bprog, wprog;
+    int fitness[2];
+    int idx[2];
     float probabilities[3] = { 0.4, 0.4, 0.2 };
+    program_t winners[2];
 //     int temperature = STARTTEMP;
 //     int gototemp = STARTTEMP;
 //     int iterations_since_change = 0;
@@ -654,6 +748,9 @@ int main()
     ltime = time(NULL);
     srand(ltime);
 
+    fitness[0] = INT_MAX;
+    fitness[1] = 0;
+
     init_levels();
     init_srcregisters();
     init_resultregisters();
@@ -663,28 +760,63 @@ int main()
     for(int i = 0; i < NUM_PROGRAMS; i++) {
         program_t *prog = &programs[i];
 //         print_instructions(eff_prog.instructions, eff_prog.length, 1);
-        get_effective_program(prog, &eff_prog);
-        run_program(&eff_prog, 0);
-        prog->cost = result_cost(&correct);
-        if (prog->cost < bcost) {
-            bcost = prog->cost;
-            bprog = i;
+        effective_program(prog);
+        printf("length (absolute effective)= %d %d, ", prog->length[LEN_ABSOLUTE], prog->length[LEN_EFFECTIVE]);
+        run_program(prog, 0);
+        result_fitness(prog);
+        if (prog->fitness < fitness[0]) {
+            fitness[0] = prog->fitness;
+            idx[0] = i;
         }
-        if (prog->cost > wcost) {
-            wcost = prog->cost;
-            wprog = i;
+        if (prog->fitness > fitness[1]) {
+            fitness[1] = prog->fitness;
+            idx[1] = i;
         }
 
-        printf("cost = %d\n", prog->cost);
+        printf("fitness = %d\n", prog->fitness);
     }
 
     /* Best program replaces the worst, with a random chance at mutation */
-    memcpy(&programs[wprog], &programs[bprog], sizeof(programs[0]));
-    mutate_program(&programs[wprog], probabilities);
-    get_effective_program(&programs[wprog], &eff_prog);
-    run_program(&eff_prog, 0);
-    programs[wprog].cost = result_cost(&correct);
-    run_tournament(programs, 4);
+    memcpy(&programs[idx[1]], &programs[idx[0]], sizeof(programs[0]));
+    mutate_program(&programs[idx[1]], probabilities);
+    effective_program(&programs[idx[1]]);
+    run_program(&programs[idx[1]], 0);
+    result_fitness(&programs[idx[1]]);
+    printf("fitness = %d\n", programs[idx[1]].fitness);
+    while (fitness[0] > 0) {
+        run_tournament(programs, &winners[0], 8);
+        run_tournament(programs, &winners[1], 8);
+//         for(int i = 0; i < 2; i++)
+//             printf("cost = %d\n", winners[i].cost);
+        crossover(winners, 5, 50);
+        for(int i = 0; i < 2; i++) {
+            if (rand() < RAND_MAX * 0.75)
+                mutate_program(&winners[i], probabilities);
+            effective_program(&winners[i]);
+            run_program(&winners[i], 0);
+            result_fitness(&winners[i]);
+//             printf("cost = %d\n", winners[i].cost);
+        }
+        for (int j = 0; j < 2; j++) {
+            for (int i = 0; i < NUM_PROGRAMS; i++) {
+                if(programs[i].fitness > winners[j].fitness) {
+                    memcpy(&programs[i], &winners[j], sizeof(winners[j]));
+                    break;
+                }
+            }
+        }
+        for(int i = 0; i < NUM_PROGRAMS; i++) {
+            if (fitness[0] > programs[i].fitness) {
+                fitness[0] = programs[i].fitness;
+                effective_program(&programs[i]);
+                run_program(&programs[i], 1);
+                print_program(&programs[i], 0);
+//                 printf("fitness = %d\n", programs[i].fitness);
+                printf("\n");
+            }
+        }
+    }
+
 #if 0
     for( i = 0; i < ITERATIONS; i++ )
     {
