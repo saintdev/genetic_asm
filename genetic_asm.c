@@ -80,9 +80,11 @@ void init_levels_4x4()
     ZIG(12,1,3) ZIG(13,2,3) ZIG(14,3,2) ZIG(15,3,3)
 }
 
-void init_levels()
+void init_reference()
 {
     init_levels_4x4();
+    init_srcregisters();
+    init_resultregisters();
 }
 
 enum instructions {
@@ -628,9 +630,7 @@ int main()
     cost[0] = INT_MAX;
     cost[1] = 0;
 
-    init_levels();
-    init_srcregisters();
-    init_resultregisters();
+    init_reference();
     init_programs(programs);
 
 
