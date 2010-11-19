@@ -31,6 +31,7 @@ typedef struct program {
     int length[2];  /* 0 = absolute, 1 = effective */
     int fitness;
     int cost;
+    register_t registers[NUM_REGS];
     instruction_t instructions[MAX_INSTR];
     instruction_t effective[MAX_INSTR];
 } program_t;
@@ -41,7 +42,6 @@ static uint16_t coeffs[8*8];
 
 static register_t srcregisters[NUM_REGS];
 static register_t resultregisters[8];
-static register_t registers[NUM_REGS];
 // static uint8_t counter[65];
 
 #define ZIG(i,y,x) levels[i] = coeffs[x*8+y];
@@ -214,7 +214,7 @@ void print_program( program_t *program, int debug )
     printf("\n");
 }
 
-void execute_instruction( instruction_t instr )
+void execute_instruction( instruction_t instr, register_t *registers )
 {
     register_t temp;
     register_t *output = &registers[instr.operands[0]];
@@ -341,9 +341,9 @@ void init_srcregisters()
         memset(&srcregisters[r], 0, sizeof(srcregisters[0]));
 }
 
-void init_registers()
+void init_registers(program_t *program)
 {
-    memcpy( registers, srcregisters, sizeof(srcregisters) );
+    memcpy( program->registers, srcregisters, sizeof(srcregisters) );
 }
 
 void init_programs(program_t *programs)
@@ -426,7 +426,7 @@ int run_program( program_t *program, int debug )
 {
     int i,r,j;
 
-    init_registers();
+    init_registers(program);
     if( debug ) {
 //         printf("sourceregs: \n");
 //         for(r=0; r<8; r++) {
@@ -452,13 +452,13 @@ int run_program( program_t *program, int debug )
             }
         }
 */
-        execute_instruction( program->effective[i] );
+        execute_instruction( program->effective[i], program->registers );
     }
     if(debug) {
         printf("resultregs: \n");
         for(r=0;r<NUM_REGS;r++) {
             for(j=0;j<8;j++)
-                printf("%d ",registers[r].wd[j]);
+                printf("%d ", program->registers[r].wd[j]);
             printf("\n");
         }
     }
@@ -475,7 +475,7 @@ void result_fitness( program_t *prog )
     for( int r = 0; r < 2; r++ ) {
         int regerror = 0;
         for(int i = 0; i < 8; i++ )
-            regerror += registers[r].wd[i] != resultregisters[r].wd[i];
+            regerror += prog->registers[r].wd[i] != resultregisters[r].wd[i];
         sumerror += regerror;
     }
 
