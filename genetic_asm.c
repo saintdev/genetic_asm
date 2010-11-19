@@ -484,7 +484,8 @@ void result_fitness( program_t *prog, register_t *reference )
 void result_cost( program_t *prog )
 {
     /* TODO: Use instruction latency/thouroghput */
-    prog->cost = prog->length[LEN_EFFECTIVE];
+//     prog->cost = prog->length[LEN_EFFECTIVE];
+    prog->cost = INT_MAX;
 }
 
 void instruction_delete( uint8_t (*instructions)[4], int loc, int numinstructions )
