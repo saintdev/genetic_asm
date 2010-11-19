@@ -13,13 +13,12 @@
 #define LEN_ABSOLUTE  0
 #define LEN_EFFECTIVE 1
 
-static uint16_t levels[8*8];
-static uint16_t coeffs[8*8];
-
-static uint16_t srcregisters[NUM_REGS][8];
-static uint16_t resultregisters[8][8];
-static uint16_t registers[NUM_REGS][8];
-// static uint8_t counter[65];
+typedef union reg {
+    uint64_t q[2];
+    uint32_t d[4];
+    uint16_t wd[8];
+    uint8_t  b[16];
+} register_t;
 
 typedef struct instruction {
     uint8_t opcode;
@@ -36,11 +35,14 @@ typedef struct program {
     instruction_t effective[MAX_INSTR];
 } program_t;
 
-typedef union simd16x4 {
-    uint64_t a;
-    uint32_t b[2];
-    uint16_t c[4];
-} simd16x4_t;
+
+static uint16_t levels[8*8];
+static uint16_t coeffs[8*8];
+
+static register_t srcregisters[NUM_REGS];
+static register_t resultregisters[8];
+static register_t registers[NUM_REGS];
+// static uint8_t counter[65];
 
 #define ZIG(i,y,x) levels[i] = coeffs[x*8+y];
 
@@ -214,178 +216,112 @@ void print_program( program_t *program, int debug )
 
 void execute_instruction( instruction_t instr )
 {
-    uint16_t *input1 = registers[instr.operands[1]];
-    uint16_t *output = registers[instr.operands[0]];
-    uint16_t temp[8];
+    register_t temp;
+    register_t *output = &registers[instr.operands[0]];
+    register_t *input1 = &registers[instr.operands[1]];
+    uint8_t imm = instr.operands[2];
     int i;
-    int imm = instr.operands[2];
 
     switch( instr.opcode )
     {
         case PUNPCKLWD:
-            temp[0] = output[0];
-            temp[2] = output[1];
-            temp[4] = output[2];
-            temp[6] = output[3];
-            temp[1] = input1[0];
-            temp[3] = input1[1];
-            temp[5] = input1[2];
-            temp[7] = input1[3];
+            temp.wd[0] = output->wd[0];
+            temp.wd[2] = output->wd[1];
+            temp.wd[4] = output->wd[2];
+            temp.wd[6] = output->wd[3];
+            temp.wd[1] = input1->wd[0];
+            temp.wd[3] = input1->wd[1];
+            temp.wd[5] = input1->wd[2];
+            temp.wd[7] = input1->wd[3];
             break;
         case PUNPCKHWD:
-            temp[0] = output[4];
-            temp[2] = output[5];
-            temp[4] = output[6];
-            temp[6] = output[7];
-            temp[1] = input1[4];
-            temp[3] = input1[5];
-            temp[5] = input1[6];
-            temp[7] = input1[7];
+            temp.wd[0] = output->wd[4];
+            temp.wd[2] = output->wd[5];
+            temp.wd[4] = output->wd[6];
+            temp.wd[6] = output->wd[7];
+            temp.wd[1] = input1->wd[4];
+            temp.wd[3] = input1->wd[5];
+            temp.wd[5] = input1->wd[6];
+            temp.wd[7] = input1->wd[7];
             break;
         case PUNCPKLDQ:
-            temp[0] = output[0];
-            temp[1] = output[1];
-            temp[4] = output[2];
-            temp[5] = output[3];
-            temp[2] = input1[0];
-            temp[3] = input1[1];
-            temp[6] = input1[2];
-            temp[7] = input1[3];
+            temp.d[0] = output->d[0];
+            temp.d[2] = output->d[1];
+            temp.d[1] = input1->d[0];
+            temp.d[3] = input1->d[1];
             break;
         case PUNPCKHDQ:
-            temp[0] = output[4];
-            temp[1] = output[5];
-            temp[4] = output[6];
-            temp[5] = output[7];
-            temp[2] = input1[4];
-            temp[3] = input1[5];
-            temp[6] = input1[6];
-            temp[7] = input1[7];
+            temp.d[0] = output->d[2];
+            temp.d[2] = output->d[3];
+            temp.d[1] = input1->d[2];
+            temp.d[3] = input1->d[3];
             break;
         case PUNPCKLQDQ:
-            temp[0] = output[0];
-            temp[1] = output[1];
-            temp[2] = output[2];
-            temp[3] = output[3];
-            temp[4] = input1[0];
-            temp[5] = input1[1];
-            temp[6] = input1[2];
-            temp[7] = input1[3];
+            temp.q[0] = output->q[0];
+            temp.q[1] = input1->q[0];
             break;
         case PUNPCKHQDQ:
-            temp[0] = output[4];
-            temp[1] = output[5];
-            temp[2] = output[6];
-            temp[3] = output[7];
-            temp[4] = input1[4];
-            temp[5] = input1[5];
-            temp[6] = input1[6];
-            temp[7] = input1[7];
+            temp.q[0] = output->q[1];
+            temp.q[1] = input1->q[1];
             break;
         case MOVDQA:
-            temp[0] = input1[0];
-            temp[1] = input1[1];
-            temp[2] = input1[2];
-            temp[3] = input1[3];
-            temp[4] = input1[4];
-            temp[5] = input1[5];
-            temp[6] = input1[6];
-            temp[7] = input1[7];
+            temp.q[0] = input1->q[0];
+            temp.q[1] = input1->q[0];
             break;
         case PSLLDQ:
-            if (imm > 8) imm = 8;
-            for( i = 0; i < 8 - imm; i++ )
-                temp[i] = output[i+imm];
-            for( ; i < 8; i++ )
-                temp[i] = 0;
+            if (imm > 16) imm = 16;
+            for( i = 0; i < 16 - imm; i++ )
+                temp.b[i] = output->b[i+imm];
+            for( ; i < 16; i++ )
+                temp.b[i] = 0;
             break;
         case PSRLDQ:
-            if (imm > 8) imm = 8;
+            if (imm > 16) imm = 16;
             for( i = 0; i < imm; i++ )
-                temp[i] = 0;
-            for( ; i < 8; i++ )
-                temp[i] = input1[i-imm];
+                temp.b[i] = 0;
+            for( ; i < 16; i++ )
+                temp.b[i] = output->b[i-imm];
             break;
         case PSLLQ:
-        {
-            simd16x4_t tmp;
-
             if (imm > 64) imm = 64;
-            for (int i = 0; i < 2; i++) {
-                for (int j = 0; j < 4; j++)
-                    tmp.c[j] = output[i*4+j];
-                tmp.a <<= imm;
-                for (int j = 0; j < 4; j++)
-                    temp[i*4+j] = tmp.c[j];
-            }
+            for (i = 0; i < 2; i++)
+                temp.q[i] = output->q[i] << imm;
             break;
-        }
         case PSRLQ:
-        {
-            simd16x4_t tmp;
-
             if (imm > 64) imm = 64;
-            for (int i = 0; i < 2; i++) {
-                for (int j = 0; j < 4; j++)
-                    tmp.c[j] = output[i*4+j];
-                tmp.a >>= imm;
-                for (int j = 0; j < 4; j++)
-                    temp[i*4+j] = tmp.c[j];
-            }
+            for (i = 0; i < 2; i++)
+                temp.q[i] = output->q[i] >> imm;
             break;
-        }
         case PSLLD:
-        {
-            simd16x4_t tmp;
-
             if (imm > 32) imm = 32;
-            for (int i = 0; i < 2; i++) {
-                for (int j = 0; j < 4; j++)
-                    tmp.c[j] = output[i*4+j];
-                for (int j = 0; j < 2; j++)
-                    tmp.b[j] <<= imm;
-                for (int j = 0; j < 4; j++)
-                    temp[i*4+j] = tmp.c[j];
-            }
+            for (i = 0; i < 4; i++)
+                temp.d[i] = output->d[i] << imm;
             break;
-        }
         case PSRLD:
-        {
-            simd16x4_t tmp;
-
             if (imm > 32) imm = 32;
-            for (int i = 0; i < 2; i++) {
-                for (int j = 0; j < 4; j++)
-                    tmp.c[j] = output[i*4+j];
-                for (int j = 0; j < 2; j++)
-                    tmp.b[j] >>= imm;
-                for (int j = 0; j < 4; j++)
-                    temp[i*4+j] = tmp.c[j];
-            }
+            for (i = 0; i < 4; i++)
+                temp.d[i] = output->d[i] >> imm;
             break;
-        }
         case PSHUFLW:
-            temp[0] = input1[imm&0x3]; imm >>= 2;
-            temp[1] = input1[imm&0x3]; imm >>= 2;
-            temp[2] = input1[imm&0x3]; imm >>= 2;
-            temp[3] = input1[imm&0x3];
-            for( i = 4; i < 8; i++ )
-                temp[i] = input1[i];
+            temp.wd[0] = input1->wd[imm&0x3]; imm >>= 2;
+            temp.wd[1] = input1->wd[imm&0x3]; imm >>= 2;
+            temp.wd[2] = input1->wd[imm&0x3]; imm >>= 2;
+            temp.wd[3] = input1->wd[imm&0x3];
+            temp.q[1] = input1->q[1];
             break;
         case PSHUFHW:
-            temp[4] = input1[4+(imm&0x3)]; imm >>= 2;
-            temp[5] = input1[4+(imm&0x3)]; imm >>= 2;
-            temp[6] = input1[4+(imm&0x3)]; imm >>= 2;
-            temp[7] = input1[4+(imm&0x3)];
-            for( i = 0; i < 4; i++ )
-                temp[i] = input1[i];
+            temp.wd[4] = input1->wd[4+(imm&0x3)]; imm >>= 2;
+            temp.wd[5] = input1->wd[4+(imm&0x3)]; imm >>= 2;
+            temp.wd[6] = input1->wd[4+(imm&0x3)]; imm >>= 2;
+            temp.wd[7] = input1->wd[4+(imm&0x3)];
+            temp.q[1] = input1->q[1];
             break;
         default:
             fprintf( stderr, "Error: unsupported instruction %d %d %d %d!\n", instr.opcode, instr.operands[0], instr.operands[1], instr.operands[2]);
             assert(instr.opcode < NUM_INSTR);
     }
 
-    memcpy( output, temp, 8*sizeof(output[0]) );
+    memcpy( output, &temp, sizeof(*output) );
 }
 
 void init_resultregisters()
@@ -393,16 +329,16 @@ void init_resultregisters()
     int r, i;
     for(r=0;r<8;r++)
         for(i=0;i<8;i++)
-            resultregisters[r][i] = levels[i+r*8];
+            resultregisters[r].wd[i] = levels[i+r*8];
 }
 
 void init_srcregisters()
 {
     int r;
     for(r = 0; r < 2; r++)
-        memcpy(srcregisters[r], &coeffs[r*8], sizeof(coeffs[0]) * 8);
+        memcpy(&srcregisters[r], &coeffs[r*8], sizeof(srcregisters[0]));
     for(; r < NUM_REGS; r++)
-        memset(srcregisters[r], 0, sizeof(srcregisters[r][0]) * 8);
+        memset(&srcregisters[r], 0, sizeof(srcregisters[0]));
 }
 
 void init_registers()
@@ -501,7 +437,7 @@ int run_program( program_t *program, int debug )
         printf("targetregs: \n");
         for(r=0;r<8;r++) {
             for(j=0;j<8;j++)
-                printf("%d ",resultregisters[r][j]);
+                printf("%d ",resultregisters[r].wd[j]);
             printf("\n");
         }
     }
@@ -522,7 +458,7 @@ int run_program( program_t *program, int debug )
         printf("resultregs: \n");
         for(r=0;r<NUM_REGS;r++) {
             for(j=0;j<8;j++)
-                printf("%d ",registers[r][j]);
+                printf("%d ",registers[r].wd[j]);
             printf("\n");
         }
     }
@@ -539,7 +475,7 @@ void result_fitness( program_t *prog )
     for( int r = 0; r < 2; r++ ) {
         int regerror = 0;
         for(int i = 0; i < 8; i++ )
-            regerror += registers[r][i] != resultregisters[r][i];
+            regerror += registers[r].wd[i] != resultregisters[r].wd[i];
         sumerror += regerror;
     }
 
@@ -751,7 +687,7 @@ int main()
         for (int j = 0; j < 2; j++) {
             for (int i = 0; i < NUM_PROGRAMS; i++) {
                 if(programs[i].fitness > winners[j].fitness) {
-                    memcpy(&programs[i], &winners[j], sizeof(winners[j]));
+                    memcpy(&programs[i], &winners[j], sizeof(programs[0]));
                     break;
                 }
             }
