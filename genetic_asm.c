@@ -350,7 +350,7 @@ void init_programs(program_t *programs)
 {
     for(int i = 0; i < NUM_PROGRAMS; i++) {
         program_t *program = &programs[i];
-        program->length[LEN_ABSOLUTE] = (rand() % (51)) + 5;
+        program->length[LEN_ABSOLUTE] = (rand() % (96)) + 5;
         for(int j = 0; j < program->length[LEN_ABSOLUTE]; j++) {
             int instr = rand() % NUM_INSTR;
             int output = rand() % NUM_REGS;
