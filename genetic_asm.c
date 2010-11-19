@@ -39,9 +39,6 @@ typedef struct program {
 
 static uint16_t levels[8*8];
 static uint16_t coeffs[8*8];
-
-static register_t srcregisters[NUM_REGS];
-static register_t resultregisters[8];
 // static uint8_t counter[65];
 
 #define ZIG(i,y,x) levels[i] = coeffs[x*8+y];
@@ -78,13 +75,6 @@ void init_levels_4x4()
     ZIG( 4,1,1) ZIG( 5,0,2) ZIG( 6,0,3) ZIG( 7,1,2)
     ZIG( 8,2,1) ZIG( 9,3,0) ZIG(10,3,1) ZIG(11,2,2)
     ZIG(12,1,3) ZIG(13,2,3) ZIG(14,3,2) ZIG(15,3,3)
-}
-
-void init_reference()
-{
-    init_levels_4x4();
-    init_srcregisters();
-    init_resultregisters();
 }
 
 enum instructions {
@@ -326,26 +316,33 @@ void execute_instruction( instruction_t instr, register_t *registers )
     memcpy( output, &temp, sizeof(*output) );
 }
 
-void init_resultregisters()
+void init_resultregisters(register_t *reference)
 {
     int r, i;
     for(r=0;r<8;r++)
         for(i=0;i<8;i++)
-            resultregisters[r].wd[i] = levels[i+r*8];
+            reference[r].wd[i] = levels[i+r*8];
 }
 
-void init_srcregisters()
+void init_srcregisters(register_t *src)
 {
     int r;
     for(r = 0; r < 2; r++)
-        memcpy(&srcregisters[r], &coeffs[r*8], sizeof(srcregisters[0]));
+        memcpy(&src[r], &coeffs[r*8], sizeof(src[0]));
     for(; r < NUM_REGS; r++)
-        memset(&srcregisters[r], 0, sizeof(srcregisters[0]));
+        memset(&src[r], 0, sizeof(src[0]));
 }
 
-void init_registers(program_t *program)
+void init_registers(program_t *program, register_t *src)
 {
-    memcpy( program->registers, srcregisters, sizeof(srcregisters) );
+    memcpy( program->registers, src, sizeof(program->registers) );
+}
+
+void init_reference(register_t *src, register_t *reference)
+{
+    init_levels_4x4();
+    init_srcregisters(src);
+    init_resultregisters(reference);
 }
 
 void init_programs(program_t *programs)
@@ -424,11 +421,11 @@ void effective_program(program_t *prog)
     prog->length[LEN_EFFECTIVE] = j;
 }
 
-int run_program( program_t *program, int debug )
+int run_program( program_t *program, register_t *src, register_t *reference, int debug )
 {
     int i,r,j;
 
-    init_registers(program);
+    init_registers(program, src);
     if( debug ) {
 //         printf("sourceregs: \n");
 //         for(r=0; r<8; r++) {
@@ -439,7 +436,7 @@ int run_program( program_t *program, int debug )
         printf("targetregs: \n");
         for(r=0;r<8;r++) {
             for(j=0;j<8;j++)
-                printf("%d ",resultregisters[r].wd[j]);
+                printf("%d ",reference[r].wd[j]);
             printf("\n");
         }
     }
@@ -470,14 +467,14 @@ int run_program( program_t *program, int debug )
 //#define CHECK_LOC if( i >= 2 && i <= 5 ) continue;
 #define CHECK_LOC if( 0 ) continue;
 
-void result_fitness( program_t *prog )
+void result_fitness( program_t *prog, register_t *reference )
 {
     int sumerror = 0;
 
     for( int r = 0; r < 2; r++ ) {
         int regerror = 0;
         for(int i = 0; i < 8; i++ )
-            regerror += prog->registers[r].wd[i] != resultregisters[r].wd[i];
+            regerror += prog->registers[r].wd[i] != reference[r].wd[i];
         sumerror += regerror;
     }
 
@@ -620,6 +617,8 @@ int main()
     int idx[2] = { 0 };
     float probabilities[3] = { 0.4, 0.4, 0.2 };
     program_t winners[2];
+    register_t src[NUM_REGS];
+    register_t reference[NUM_REGS];
 
     /* get the current calendar time */
     ltime = time(NULL);
@@ -630,7 +629,7 @@ int main()
     cost[0] = INT_MAX;
     cost[1] = 0;
 
-    init_reference();
+    init_reference(src, reference);
     init_programs(programs);
 
 
@@ -638,8 +637,8 @@ int main()
         program_t *prog = &programs[i];
         effective_program(prog);
         printf("length (absolute effective)= %d %d, ", prog->length[LEN_ABSOLUTE], prog->length[LEN_EFFECTIVE]);
-        run_program(prog, 0);
-        result_fitness(prog);
+        run_program(prog, src, reference, 0);
+        result_fitness(prog, reference);
         result_cost(prog);
 
         if (prog->fitness < fitness[0]) {
@@ -668,8 +667,8 @@ int main()
     memcpy(&programs[idx[1]], &programs[idx[0]], sizeof(programs[0]));
     mutate_program(&programs[idx[1]], probabilities);
     effective_program(&programs[idx[1]]);
-    run_program(&programs[idx[1]], 0);
-    result_fitness(&programs[idx[1]]);
+    run_program(&programs[idx[1]], src, reference, 0);
+    result_fitness(&programs[idx[1]], reference);
     result_cost(&programs[idx[1]]);
     printf("fitness = %d\n", programs[idx[1]].fitness);
     while (fitness[0] > 0) {
@@ -680,8 +679,8 @@ int main()
             if (rand() < RAND_MAX * 0.75)
                 mutate_program(&winners[i], probabilities);
             effective_program(&winners[i]);
-            run_program(&winners[i], 0);
-            result_fitness(&winners[i]);
+            run_program(&winners[i], src, reference, 0);
+            result_fitness(&winners[i], reference);
             result_cost(&winners[i]);
         }
         for (int j = 0; j < 2; j++) {
@@ -696,7 +695,7 @@ int main()
             if (fitness[0] > programs[i].fitness) {
                 fitness[0] = programs[i].fitness;
                 effective_program(&programs[i]);
-                run_program(&programs[i], 1);
+                run_program(&programs[i], src, reference, 1);
                 print_program(&programs[i], 0);
                 printf("\n");
             }
