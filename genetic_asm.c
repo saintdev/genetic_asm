@@ -428,27 +428,6 @@ void effective_program(program_t *prog)
     prog->length[LEN_EFFECTIVE] = j;
 }
 
-void result_fitness( program_t *prog, reference_t *ref )
-{
-    int sumerror = 0;
-
-    for( int r = 0; r < ref->num_regs_used[1]; r++ ) {
-        int regerror = 0;
-        for(int i = 0; i < 8; i++ )
-            regerror += prog->registers[r].wd[i] != ref->output[r].wd[i];
-        sumerror += regerror;
-    }
-
-        prog->fitness = sumerror*sumerror;
-}
-
-void result_cost( program_t *prog )
-{
-    /* TODO: Use instruction latency/thouroghput */
-    //     prog->cost = prog->length[LEN_EFFECTIVE];
-        prog->cost = INT_MAX;
-}
-
 int run_program( program_t *program, reference_t *ref, int debug )
 {
     init_registers(program, ref);
@@ -485,11 +464,31 @@ int run_program( program_t *program, reference_t *ref, int debug )
             printf("\n");
         }
     }
-
-    result_fitness(program, ref);
-    result_cost(program);
-
     return 1;
+}
+
+//#define CHECK_LOC if( i >= 2 && i <= 5 ) continue;
+#define CHECK_LOC if( 0 ) continue;
+
+void result_fitness( program_t *prog, reference_t *ref )
+{
+    int sumerror = 0;
+
+    for( int r = 0; r < ref->num_regs_used[1]; r++ ) {
+        int regerror = 0;
+        for(int i = 0; i < 8; i++ )
+            regerror += prog->registers[r].wd[i] != ref->output[r].wd[i];
+        sumerror += regerror;
+    }
+
+    prog->fitness = sumerror*sumerror;
+}
+
+void result_cost( program_t *prog )
+{
+    /* TODO: Use instruction latency/thouroghput */
+//     prog->cost = prog->length[LEN_EFFECTIVE];
+    prog->cost = INT_MAX;
 }
 
 void instruction_delete( uint8_t (*instructions)[4], int loc, int numinstructions )
@@ -643,6 +642,8 @@ int main()
         effective_program(prog);
         printf("length (absolute effective)= %d %d, ", prog->length[LEN_ABSOLUTE], prog->length[LEN_EFFECTIVE]);
         run_program(prog, &ref, 0);
+        result_fitness(prog, &ref);
+        result_cost(prog);
 
         if (prog->fitness < fitness[0]) {
             fitness[0] = prog->fitness;
@@ -671,6 +672,8 @@ int main()
     mutate_program(&programs[idx[1]], probabilities);
     effective_program(&programs[idx[1]]);
     run_program(&programs[idx[1]], &ref, 0);
+    result_fitness(&programs[idx[1]], &ref);
+    result_cost(&programs[idx[1]]);
     printf("fitness = %d\n", programs[idx[1]].fitness);
     while (fitness[0] > 0) {
         run_tournament(programs, &winners[0], 8);
@@ -681,6 +684,8 @@ int main()
                 mutate_program(&winners[i], probabilities);
             effective_program(&winners[i]);
             run_program(&winners[i], &ref, 0);
+            result_fitness(&winners[i], &ref);
+            result_cost(&winners[i]);
         }
         for (int j = 0; j < 2; j++) {
             for (int i = 0; i < NUM_PROGRAMS; i++) {
