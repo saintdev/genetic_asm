@@ -12,6 +12,7 @@
 #define NUM_PROGRAMS 100
 #define LEN_ABSOLUTE  0
 #define LEN_EFFECTIVE 1
+#define NUM_REF 2
 
 typedef union reg {
     uint64_t q[2];
@@ -389,15 +390,16 @@ void init_programs(program_t *programs)
     }
 }
 
-void effective_program(program_t *prog)
+void effective_program(program_t *prog, int num_output_regs)
 {
     uint8_t reg_eff[NUM_REGS] = {0};
     int i = prog->length[LEN_ABSOLUTE] - 1;
     int j;
 
-    reg_eff[0] = 1;
-    reg_eff[1] = 1;
-    /* We want our results in r0-r7. For 4x4 DCT, we only need two result registers. */
+    /* We want our results starting at r0. */
+    for(int r = 0; r < num_output_regs; r++)
+        reg_eff[r] = 1;
+
     while(i >= 0 && (prog->instructions[i].operands[0] != 0 && prog->instructions[i].operands[0] != 1)) {
         prog->instructions[i].flags = 0;
         i--;
@@ -470,7 +472,7 @@ int run_program( program_t *program, reference_t *ref, int debug )
 //#define CHECK_LOC if( i >= 2 && i <= 5 ) continue;
 #define CHECK_LOC if( 0 ) continue;
 
-void result_fitness( program_t *prog, reference_t *ref )
+int result_fitness( program_t *prog, reference_t *ref )
 {
     int sumerror = 0;
 
@@ -481,7 +483,7 @@ void result_fitness( program_t *prog, reference_t *ref )
         sumerror += regerror;
     }
 
-    prog->fitness = sumerror*sumerror;
+    return sumerror*sumerror;
 }
 
 void result_cost( program_t *prog )
@@ -612,6 +614,17 @@ void crossover( program_t *parents, int delta_length, int delta_pos )
     memcpy(parents, temp, sizeof(*parents) *2);
 }
 
+void analyse_program(program_t *prog, reference_t refs[NUM_REF])
+{
+    prog->fitness = 0;
+    effective_program(prog, refs[0].num_regs_used[1]);
+    for(int i = 0; i < NUM_REF; i++) {
+        run_program(prog, &refs[i], 0);
+        prog->fitness += result_fitness(prog, &refs[i]);
+    }
+    result_cost(prog);
+}
+
 int main()
 {
     program_t programs[NUM_PROGRAMS];
@@ -621,7 +634,7 @@ int main()
     int idx[2] = { 0 };
     float probabilities[3] = { 0.4, 0.4, 0.2 };
     program_t winners[2];
-    reference_t ref;
+    reference_t ref[2];
 
     /* get the current calendar time */
     ltime = time(NULL);
@@ -632,18 +645,17 @@ int main()
     cost[0] = INT_MAX;
     cost[1] = 0;
 
-    init_srcregisters(ref.input);
-    init_reference(&ref);
+    for(int i = 0; i < NUM_REF; i++) {
+        init_srcregisters(ref[i].input);
+        init_reference(&ref[i]);
+    }
     init_programs(programs);
 
 
     for(int i = 0; i < NUM_PROGRAMS; i++) {
         program_t *prog = &programs[i];
-        effective_program(prog);
+        analyse_program(prog, ref);
         printf("length (absolute effective)= %d %d, ", prog->length[LEN_ABSOLUTE], prog->length[LEN_EFFECTIVE]);
-        run_program(prog, &ref, 0);
-        result_fitness(prog, &ref);
-        result_cost(prog);
 
         if (prog->fitness < fitness[0]) {
             fitness[0] = prog->fitness;
@@ -670,10 +682,7 @@ int main()
     /* Best program replaces the worst, with a random chance at mutation */
     memcpy(&programs[idx[1]], &programs[idx[0]], sizeof(programs[0]));
     mutate_program(&programs[idx[1]], probabilities);
-    effective_program(&programs[idx[1]]);
-    run_program(&programs[idx[1]], &ref, 0);
-    result_fitness(&programs[idx[1]], &ref);
-    result_cost(&programs[idx[1]]);
+    analyse_program(&programs[idx[1]], ref);
     printf("fitness = %d\n", programs[idx[1]].fitness);
     while (fitness[0] > 0) {
         run_tournament(programs, &winners[0], 8);
@@ -682,10 +691,7 @@ int main()
         for(int i = 0; i < 2; i++) {
             if (rand() < RAND_MAX * 0.75)
                 mutate_program(&winners[i], probabilities);
-            effective_program(&winners[i]);
-            run_program(&winners[i], &ref, 0);
-            result_fitness(&winners[i], &ref);
-            result_cost(&winners[i]);
+            analyse_program(&winners[i], ref);
         }
         for (int j = 0; j < 2; j++) {
             for (int i = 0; i < NUM_PROGRAMS; i++) {
@@ -698,8 +704,8 @@ int main()
         for(int i = 0; i < NUM_PROGRAMS; i++) {
             if (fitness[0] > programs[i].fitness) {
                 fitness[0] = programs[i].fitness;
-                effective_program(&programs[i]);
-                run_program(&programs[i], &ref, 1);
+                effective_program(&programs[i], ref[0].num_regs_used[1]);
+                run_program(&programs[i], &ref[0], 1);
                 print_program(&programs[i], 0);
                 printf("\n");
             }
