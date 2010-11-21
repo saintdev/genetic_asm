@@ -490,7 +490,8 @@ void result_cost( program_t *prog )
 {
     /* TODO: Use instruction latency/thouroghput */
 //     prog->cost = prog->length[LEN_EFFECTIVE];
-    prog->cost = INT_MAX;
+//     if(!prog->cost)
+        prog->cost = INT_MAX;
 }
 
 void instruction_delete( uint8_t (*instructions)[4], int loc, int numinstructions )
@@ -553,29 +554,26 @@ int instruction_cost( uint8_t (*instructions)[4], int numinstructions )
 void run_tournament( program_t *programs, program_t *winner, int size)
 {
     int contestants[NUM_PROGRAMS];
-    int shift = 0;
+    int idx = rand() % NUM_PROGRAMS;
+    program_t *best = &programs[idx];
 
-    contestants[0] = NUM_PROGRAMS;
-    for(int i = 0; i < size; i++) {
-        contestants[i] = rand() % NUM_PROGRAMS;
-        for(int j = 0; j < i; j++) {
-            while(contestants[i] == contestants[j])
-                contestants[i] = rand() % NUM_PROGRAMS;
-        }
+    for(int i = 0, j = 0; i < NUM_PROGRAMS - 1; i++) {
+        if(i == idx)
+            continue;
+        contestants[j++] = i;
     }
-    do {
-        for(int i = 0; i < size-1; i += (2 << shift)) {
-            program_t *a = &programs[contestants[i]];
-            program_t *b = &programs[contestants[i + (1<<shift)]];
-            if (a->fitness < b->fitness)
-                contestants[i] = contestants[i+(1<<shift)];
-            else if (a->fitness == b->fitness)
-                if (a->cost > b->cost)
-                    contestants[i] = contestants[i+(1<<shift)];
-        }
-        shift++;
-    } while(size >> shift > 1);
-    memcpy(winner, &programs[contestants[0]], sizeof(*winner));
+    for(int i = 0; i < (size - 1); i++) {
+        int ii = rand() % ((NUM_PROGRAMS-1)- (i+1));
+        idx = contestants[ii];
+        if(programs[idx].fitness < best->fitness)
+            best = &programs[idx];
+        else if(programs[idx].fitness == best->fitness)
+            if(programs[idx].cost < best->cost)
+                best = &programs[idx];
+        for(int j = idx; j < NUM_PROGRAMS-1 - (i+1); j++)
+            contestants[j] = contestants[j+1];
+    }
+    memcpy(winner, best, sizeof(*winner));
 }
 
 void crossover( program_t *parents, int delta_length, int delta_pos )
