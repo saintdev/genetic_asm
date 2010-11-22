@@ -12,7 +12,7 @@
 #define NUM_PROGRAMS 100
 #define LEN_ABSOLUTE  0
 #define LEN_EFFECTIVE 1
-#define NUM_REF 2
+#define NUM_REF 3
 
 typedef union reg {
     uint64_t q[2];
@@ -362,6 +362,7 @@ void init_programs(program_t *programs)
             int instr = rand() % NUM_INSTR;
             int output = rand() % NUM_REGS;
             int input1 = NUM_REGS, input2 = 0;
+            assert(j < MAX_INSTR);
             instruction_t *instruction = &program->instructions[j];
 
             /* FIXME: This should be completely random, instead of the guided randomnes we have below.
@@ -401,11 +402,13 @@ void effective_program(program_t *prog, int num_output_regs)
         reg_eff[r] = 1;
 
     while(i >= 0 && (prog->instructions[i].operands[0] != 0 && prog->instructions[i].operands[0] != 1)) {
+        assert(i < MAX_INSTR && i >= 0);
         prog->instructions[i].flags = 0;
         i--;
     }
     for( ; i >= 0; i--) {
         instruction_t *instr = &prog->instructions[i];
+        assert(i >= 0);
 
         instr->flags = 0;
         for (j = 0; j < NUM_REGS; j++)
@@ -422,6 +425,7 @@ void effective_program(program_t *prog, int num_output_regs)
     }
 
     for(j = i = 0; i < prog->length[LEN_ABSOLUTE]; i++) {
+        assert(i < MAX_INSTR);
         if (!prog->instructions[i].flags)
             continue;
         prog->instructions[i].flags = 0;
@@ -523,6 +527,9 @@ void mutate_program( program_t *prog, float probabilities[3] )
     int p = rand();
     int ins_idx = rand() % prog->length[LEN_ABSOLUTE];
     instruction_t *instr = &prog->instructions[ins_idx];
+
+    assert(ins_idx < MAX_INSTR);
+
     if(p < RAND_MAX * probabilities[0])                                 /* Modify an instruction */
         instr->opcode = rand() % NUM_INSTR;
     else if (p < RAND_MAX * (probabilities[0] + probabilities[1])) {    /* Modify a regester */
@@ -582,33 +589,30 @@ void crossover( program_t *parents, int delta_length, int delta_pos )
     /* FIXME: Respect delta_pos, delta_length */
     int point[2];
     int length[2];
+    int j;
 
     for(int i = 0; i < 2; i++) {
         point[i] = rand() % parents[i].length[LEN_ABSOLUTE];
-        length[i] = (rand() % (parents[i].length[LEN_ABSOLUTE] - point[i])) + 1;
+        length[i] = rand() % (parents[i].length[LEN_ABSOLUTE]+1 - point[i]);
     }
+
+    for(int i = 0; i < 2; i++)
+        if (parents[!i].length[LEN_ABSOLUTE] - length[!i] + length[i] > MAX_INSTR)
+            length[i] = MAX_INSTR - (parents[!i].length[LEN_ABSOLUTE] - length[!i]);
 
     for(int i = 0; i < 2; i++) {
-        if (point[i] + length[!i] > MAX_INSTR)
-            length[!i] = MAX_INSTR - point[i];
-        if (point[i] + length[i] > parents[i].length[LEN_ABSOLUTE])
-            length[i] = parents[i].length[LEN_ABSOLUTE] - point[i];
+        for(j = 0; j < parents[i].length[LEN_ABSOLUTE] - length[i] + length[!i]; j++) {
+            assert(j - length[!i] + length[i] < parents[i].length[LEN_ABSOLUTE]);
+            if (j < point[i])
+                temp[i].instructions[j] = parents[i].instructions[j];
+            else if (j < point[i] + length[!i])
+                temp[i].instructions[j] = parents[!i].instructions[j + point[!i] - point[i]];
+            else
+                temp[i].instructions[j] = parents[i].instructions[j - length[!i] + length[i]];
+        }
+        temp[i].length[LEN_ABSOLUTE] = j;
     }
 
-    for(int j = 0; j < 2; j++) {
-        for(int i = 0; i < point[j]; i++) {
-            temp[j].instructions[i] = parents[j].instructions[i];
-        }
-        for(int i = 0; i < length[!j]; i++ ) {
-            temp[j].instructions[i+point[j]] = parents[!j].instructions[i+point[!j]];
-        }
-        for(int i = 0; i < parents[j].length[LEN_ABSOLUTE] - point[j] - length[j]; i++) {
-            temp[j].instructions[i+point[j]+length[!j]] = parents[j].instructions[i+point[j]+length[j]];
-        }
-        temp[j].length[LEN_ABSOLUTE] = point[j] + length[!j] + (parents[j].length[LEN_ABSOLUTE] - point[j] - length[j]);
-        temp[j].fitness = INT_MAX;
-        temp[j].cost = 0;
-    }
     memcpy(parents, temp, sizeof(*parents) *2);
 }
 
@@ -632,7 +636,7 @@ int main()
     int idx[2] = { 0 };
     float probabilities[3] = { 0.4, 0.4, 0.2 };
     program_t winners[2];
-    reference_t ref[2];
+    reference_t ref[NUM_REF];
 
     /* get the current calendar time */
     ltime = time(NULL);
@@ -643,7 +647,12 @@ int main()
     cost[0] = INT_MAX;
     cost[1] = 0;
 
-    for(int i = 0; i < NUM_REF; i++) {
+    for(int r = 0; r < 2; r++)
+        for(int i = 0; i < 8; i++)
+            ref[0].input[r].wd[i] = i+1+(r*8);
+    init_reference(&ref[0]);
+
+    for(int i = 1; i < NUM_REF; i++) {
         init_srcregisters(ref[i].input);
         init_reference(&ref[i]);
     }
