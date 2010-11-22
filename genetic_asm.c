@@ -524,6 +524,8 @@ void instruction_shift( uint8_t (*instructions)[4], int loc, int numinstructions
 
 void mutate_program( program_t *prog, float probabilities[3] )
 {
+    if (prog->length[LEN_ABSOLUTE] == 0)
+        return;
     int p = rand();
     int ins_idx = rand() % prog->length[LEN_ABSOLUTE];
     instruction_t *instr = &prog->instructions[ins_idx];
@@ -592,6 +594,8 @@ void crossover( program_t *parents, int delta_length, int delta_pos )
     int j;
 
     for(int i = 0; i < 2; i++) {
+        if (parents[i].length[LEN_ABSOLUTE] == 0)
+            return;
         point[i] = rand() % parents[i].length[LEN_ABSOLUTE];
         length[i] = rand() % (parents[i].length[LEN_ABSOLUTE]+1 - point[i]);
     }
