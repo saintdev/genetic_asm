@@ -312,11 +312,11 @@ void execute_instruction( instruction_t instr, register_t *registers )
             temp.q[1] = input1->q[1];
             break;
         case PSHUFHW:
+            temp.q[0] = input1->q[0];
             temp.wd[4] = input1->wd[4+(imm&0x3)]; imm >>= 2;
             temp.wd[5] = input1->wd[4+(imm&0x3)]; imm >>= 2;
             temp.wd[6] = input1->wd[4+(imm&0x3)]; imm >>= 2;
             temp.wd[7] = input1->wd[4+(imm&0x3)];
-            temp.q[1] = input1->q[1];
             break;
         default:
             fprintf( stderr, "Error: unsupported instruction %d %d %d %d!\n", instr.opcode, instr.operands[0], instr.operands[1], instr.operands[2]);
