@@ -285,24 +285,40 @@ void execute_instruction( instruction_t instr, register_t *registers )
                 temp.b[i] = output->b[i-imm];
             break;
         case PSLLQ:
-            if (imm > 64) imm = 64;
-            for (i = 0; i < 2; i++)
-                temp.q[i] = output->q[i] << imm;
+            if (imm > 64) {
+                temp.q[0] = 0;
+                temp.q[1] = 0;
+            } else {
+                for (i = 0; i < 2; i++)
+                    temp.q[i] = output->q[i] << imm;
+            }
             break;
         case PSRLQ:
-            if (imm > 64) imm = 64;
-            for (i = 0; i < 2; i++)
-                temp.q[i] = output->q[i] >> imm;
+            if (imm > 64) {
+                temp.q[0] = 0;
+                temp.q[1] = 0;
+            } else {
+                for (i = 0; i < 2; i++)
+                    temp.q[i] = output->q[i] >> imm;
+            }
             break;
         case PSLLD:
-            if (imm > 32) imm = 32;
-            for (i = 0; i < 4; i++)
-                temp.d[i] = output->d[i] << imm;
+            if (imm > 32) {
+                temp.q[0] = 0;
+                temp.q[1] = 0;
+            } else {
+                for (i = 0; i < 4; i++)
+                    temp.d[i] = output->d[i] << imm;
+            }
             break;
         case PSRLD:
-            if (imm > 32) imm = 32;
-            for (i = 0; i < 4; i++)
-                temp.d[i] = output->d[i] >> imm;
+            if (imm > 32) {
+                temp.q[0] = 0;
+                temp.q[1] = 0;
+            } else {
+                for (i = 0; i < 4; i++)
+                    temp.d[i] = output->d[i] >> imm;
+            }
             break;
         case PSHUFLW:
             temp.wd[0] = input1->wd[imm&0x3]; imm >>= 2;
@@ -454,9 +470,8 @@ int run_program( program_t *program, reference_t *ref, int debug )
 /*
         if(debug) {
             printf("regs: \n");
-            for(r=0;r<NUM_REGS;r++) {
-                for(j=0;j<8;j++)
-                    printf("%d ",registers[r][j]);
+            for(int r = 0;r < NUM_REGS; r++) {
+                print_register(&program->registers[r], 0);
                 printf("\n");
             }
         }
