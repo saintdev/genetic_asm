@@ -1,0 +1,9 @@
+Assembly programming by genetic evolution.
+
+This is an attempt to evolve a SIMD assembly program for the h.264
+zig-zag by genetic evolution.
+
+To compile:
+gcc -Wall -std=c99 -g3 -ggdb -O0 -o genetic_asm genetic_asm.c -lm
+
+I'll get around to making a Makefile someday.
