@@ -1,0 +1,7 @@
+-Use intrinsics or inline/dedicated assembly for emulation.
+-Multithreading
+-Use actual instruction timings for cost instead of just program length.
+-Support more instructions.
+-AVX?
+-Rewrite crossover.
+
