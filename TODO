@@ -1,7 +1,12 @@
--Use intrinsics or inline/dedicated assembly for emulation.
 -Multithreading
--Use actual instruction timings for cost instead of just program length.
--Support more instructions.
--AVX?
 -Rewrite crossover.
 
+Emulation:
+-Use intrinsics or inline/dedicated assembly.
+-Emulate more instructions
+-AVX?
+
+Cost/Fitness:
+-Use instruction timings for cost instead of just effective program length.
+-Include a 'distance' in fitness calculation. So the algorithm is aware how far
+    away the correct solution is.
