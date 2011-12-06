@@ -46,7 +46,7 @@ typedef struct reference {
 enum instructions {
     PUNPCKLWD   = 0,
     PUNPCKHWD,
-    PUNCPKLDQ,
+    PUNPCKLDQ,
     PUNPCKHDQ,
     PUNPCKLQDQ,
     PUNPCKHQDQ,
@@ -134,7 +134,7 @@ void print_instruction( instruction_t *instr, int debug )
         case PUNPCKHWD:
             printf( "punpckhwd" );
             break;
-        case PUNCPKLDQ:
+        case PUNPCKLDQ:
             printf( "punpckldq" );
             break;
         case PUNPCKHDQ:
@@ -246,7 +246,7 @@ void execute_instruction( instruction_t instr, register_t *registers )
             temp.wd[5] = input1->wd[6];
             temp.wd[7] = input1->wd[7];
             break;
-        case PUNCPKLDQ:
+        case PUNPCKLDQ:
             temp.d[0] = output->d[0];
             temp.d[2] = output->d[1];
             temp.d[1] = input1->d[0];
