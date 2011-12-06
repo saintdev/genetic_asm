@@ -1,5 +1,6 @@
 -Multithreading
 -Rewrite crossover.
+-Seed programs.
 
 Emulation:
 -Use intrinsics or inline/dedicated assembly.
@@ -10,3 +11,4 @@ Cost/Fitness:
 -Use instruction timings for cost instead of just effective program length.
 -Include a 'distance' in fitness calculation. So the algorithm is aware how far
     away the correct solution is.
+-Allow the correct solution in any register.
