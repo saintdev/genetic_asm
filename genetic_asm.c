@@ -508,8 +508,8 @@ int result_fitness( program_t *prog, reference_t *ref )
 void result_cost( program_t *prog )
 {
     /* TODO: Use instruction latency/thouroghput */
-//     prog->cost = prog->length[LEN_EFFECTIVE];
-//     if(!prog->cost)
+    prog->cost = prog->length[LEN_EFFECTIVE];
+    if(!prog->cost)
         prog->cost = INT_MAX;
 }
 
