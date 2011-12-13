@@ -211,7 +211,7 @@ void print_register( register_t *reg, int type )
     switch (type) {
         case 0:
             for(int i = 0; i < 8; i++)
-                printf("%u ", reg->wd[i]);
+                printf("%2u ", reg->wd[i]);
             break;
     }
 }
