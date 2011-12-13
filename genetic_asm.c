@@ -268,7 +268,7 @@ void execute_instruction( instruction_t instr, register_t *registers )
             break;
         case MOVDQA:
             temp.q[0] = input1->q[0];
-            temp.q[1] = input1->q[0];
+            temp.q[1] = input1->q[1];
             break;
         case PSLLDQ:
             if (imm > 16) imm = 16;
