@@ -62,8 +62,6 @@ enum instructions {
     NUM_INSTR
 };
 
-static uint16_t levels[8*8];
-static uint16_t coeffs[8*8];
 static const uint8_t allowedshuf[24] = { (0<<6)+(1<<4)+(2<<2)+(3<<0), (0<<6)+(1<<4)+(3<<2)+(2<<0),
                                          (0<<6)+(2<<4)+(3<<2)+(1<<0), (0<<6)+(2<<4)+(1<<2)+(3<<0),
                                          (0<<6)+(3<<4)+(2<<2)+(1<<0), (0<<6)+(3<<4)+(1<<2)+(2<<0),
@@ -84,6 +82,9 @@ static const uint8_t allowedshuf[24] = { (0<<6)+(1<<4)+(2<<2)+(3<<0), (0<<6)+(1<
 
 void init_levels_8x8()
 {
+    uint16_t levels[8*8];
+    uint16_t coeffs[8*8];
+
     ZIG( 0,0,0) ZIG( 1,0,1) ZIG( 2,1,0) ZIG( 3,2,0)
     ZIG( 4,1,1) ZIG( 5,0,2) ZIG( 6,0,3) ZIG( 7,1,2)
     ZIG( 8,2,1) ZIG( 9,3,0) ZIG(10,4,0) ZIG(11,3,1)
@@ -345,6 +346,8 @@ void execute_instruction( instruction_t instr, register_t *registers )
 void init_resultregisters(register_t *reference)
 {
     int r, i;
+    uint16_t levels[8*8];
+
     for(r=0;r<8;r++)
         for(i=0;i<8;i++)
             reference[r].wd[i] = levels[i+r*8];
