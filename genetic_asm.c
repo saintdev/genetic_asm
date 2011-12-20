@@ -80,7 +80,7 @@ static const uint8_t allowedshuf[24] = { (0<<6)+(1<<4)+(2<<2)+(3<<0), (0<<6)+(1<
 
 #define ZIG(i,y,x) levels[i] = coeffs[x*8+y];
 
-void init_levels_8x8()
+static void init_levels_8x8()
 {
     uint16_t levels[8*8];
     uint16_t coeffs[8*8];
@@ -106,7 +106,7 @@ void init_levels_8x8()
 #undef ZIG
 #define ZIG(i,y,x) levels[i] = coeffs[x*4+y];
 
-void init_levels_4x4(reference_t *ref)
+static void init_levels_4x4(reference_t *ref)
 {
     uint16_t coeffs[4*4];
     uint16_t levels[4*4];
@@ -126,7 +126,7 @@ void init_levels_4x4(reference_t *ref)
         memset(&ref->output[r], 0, sizeof(ref->output[0]));
 }
 
-void print_instruction( instruction_t *instr, int debug )
+static void print_instruction( instruction_t *instr, int debug )
 {
     switch( instr->opcode ) {
         case PUNPCKLWD:
@@ -189,7 +189,7 @@ void print_instruction( instruction_t *instr, int debug )
     if (debug && instr->flags)          printf(" *");
 }
 
-void print_instructions( program_t *program, int debug )
+static void print_instructions( program_t *program, int debug )
 {
     for( int i = 0; i < program->length[LEN_EFFECTIVE]; i++ ) {
         instruction_t *instr = &program->effective[i];
@@ -198,7 +198,7 @@ void print_instructions( program_t *program, int debug )
     }
 }
 
-void print_program( program_t *program, int debug )
+static void print_program( program_t *program, int debug )
 {
     printf("length (absolute effective) = %d %d\n", program->length[LEN_ABSOLUTE], program->length[LEN_EFFECTIVE]);
     printf("fitness = %d\n", program->fitness);
@@ -207,7 +207,7 @@ void print_program( program_t *program, int debug )
     printf("\n");
 }
 
-void print_register( register_t *reg, int type )
+static void print_register( register_t *reg, int type )
 {
     switch (type) {
         case 0:
@@ -217,7 +217,7 @@ void print_register( register_t *reg, int type )
     }
 }
 
-void execute_instruction( instruction_t instr, register_t *registers )
+static void execute_instruction( instruction_t instr, register_t *registers )
 {
     register_t temp;
     register_t *output = &registers[instr.operands[0]];
@@ -343,7 +343,7 @@ void execute_instruction( instruction_t instr, register_t *registers )
     memcpy( output, &temp, sizeof(*output) );
 }
 
-void init_resultregisters(register_t *reference)
+static void init_resultregisters(register_t *reference)
 {
     int r, i;
     uint16_t levels[8*8];
@@ -353,26 +353,26 @@ void init_resultregisters(register_t *reference)
             reference[r].wd[i] = levels[i+r*8];
 }
 
-void init_srcregisters(register_t *regs)
+static void init_srcregisters(register_t *regs)
 {
     for(int r = 0; r < NUM_REGS; r++)
         for(int i = 0; i < 4; i++)
             regs[r].d[i] = rand();
 }
 
-void init_registers(program_t *program, reference_t *ref)
+static void init_registers(program_t *program, reference_t *ref)
 {
     memcpy( program->registers, ref->input, sizeof(program->registers) );
 }
 
-void init_reference(reference_t *ref)
+static void init_reference(reference_t *ref)
 {
     init_levels_4x4(ref);
     for(int r = ref->num_regs_used[0]; r < NUM_REGS; r++)
         memset(&ref->input[r], 0, sizeof(ref->input[0]));
 }
 
-void init_programs(program_t *programs)
+static void init_programs(program_t *programs)
 {
     for(int i = 0; i < NUM_PROGRAMS; i++) {
         program_t *program = &programs[i];
@@ -410,7 +410,7 @@ void init_programs(program_t *programs)
     }
 }
 
-void effective_program(program_t *prog, int num_output_regs)
+static void effective_program(program_t *prog, int num_output_regs)
 {
     uint8_t reg_eff[NUM_REGS] = {0};
     int i = prog->length[LEN_ABSOLUTE] - 1;
@@ -453,7 +453,7 @@ void effective_program(program_t *prog, int num_output_regs)
     prog->length[LEN_EFFECTIVE] = j;
 }
 
-int run_program( program_t *program, reference_t *ref, int debug )
+static int run_program( program_t *program, reference_t *ref, int debug )
 {
     init_registers(program, ref);
     if( debug ) {
@@ -494,7 +494,7 @@ int run_program( program_t *program, reference_t *ref, int debug )
 //#define CHECK_LOC if( i >= 2 && i <= 5 ) continue;
 #define CHECK_LOC if( 0 ) continue;
 
-int result_fitness( program_t *prog, reference_t *ref )
+static int result_fitness( program_t *prog, reference_t *ref )
 {
     int sumerror = 0;
 
@@ -508,7 +508,7 @@ int result_fitness( program_t *prog, reference_t *ref )
     return sumerror*sumerror;
 }
 
-void result_cost( program_t *prog )
+static void result_cost( program_t *prog )
 {
     /* TODO: Use instruction latency/thouroghput */
     prog->cost = prog->length[LEN_EFFECTIVE];
@@ -516,7 +516,7 @@ void result_cost( program_t *prog )
         prog->cost = INT_MAX;
 }
 
-void instruction_delete( uint8_t (*instructions)[4], int loc, int numinstructions )
+static void instruction_delete( uint8_t (*instructions)[4], int loc, int numinstructions )
 {
     int i;
     for( i = loc; i < numinstructions-1; i++ )
@@ -528,7 +528,7 @@ void instruction_delete( uint8_t (*instructions)[4], int loc, int numinstruction
     }
 }
 
-void instruction_shift( uint8_t (*instructions)[4], int loc, int numinstructions )
+static void instruction_shift( uint8_t (*instructions)[4], int loc, int numinstructions )
 {
     int i;
     for( i = numinstructions; i > loc; i-- )
@@ -540,7 +540,7 @@ void instruction_shift( uint8_t (*instructions)[4], int loc, int numinstructions
     }
 }
 
-void mutate_program( program_t *prog, float probabilities[3] )
+static void mutate_program( program_t *prog, float probabilities[3] )
 {
     if (prog->length[LEN_ABSOLUTE] == 0)
         return;
@@ -566,7 +566,7 @@ void mutate_program( program_t *prog, float probabilities[3] )
     prog->cost = 0;
 }
 
-int instruction_cost( uint8_t (*instructions)[4], int numinstructions )
+static int instruction_cost( uint8_t (*instructions)[4], int numinstructions )
 {
     int i;
     int cost = 0;
@@ -578,7 +578,7 @@ int instruction_cost( uint8_t (*instructions)[4], int numinstructions )
     return cost;
 }
 
-void run_tournament( program_t *programs, program_t *winner, int size)
+static void run_tournament( program_t *programs, program_t *winner, int size)
 {
     int contestants[NUM_PROGRAMS];
     int idx = rand() % NUM_PROGRAMS;
@@ -603,7 +603,7 @@ void run_tournament( program_t *programs, program_t *winner, int size)
     memcpy(winner, best, sizeof(*winner));
 }
 
-void crossover( program_t *parents, int delta_length, int delta_pos )
+static void crossover( program_t *parents, int delta_length, int delta_pos )
 {
     program_t temp[2];
     /* FIXME: Respect delta_pos, delta_length */
@@ -638,7 +638,7 @@ void crossover( program_t *parents, int delta_length, int delta_pos )
     memcpy(parents, temp, sizeof(*parents) *2);
 }
 
-void analyse_program(program_t *prog, reference_t refs[NUM_REF])
+static void analyse_program(program_t *prog, reference_t refs[NUM_REF])
 {
     prog->fitness = 0;
     effective_program(prog, refs[0].num_regs_used[1]);
