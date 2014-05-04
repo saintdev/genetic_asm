@@ -1,1 +1,3 @@
+*.o
+.depend
 genetic_asm
