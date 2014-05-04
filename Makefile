@@ -4,6 +4,7 @@ SRCS = genetic_asm.c
 
 OBJS = $(SRCS:%.c=%.o)
 DEP  = depend
+override CFLAGS += -std=gnu99
 
 .PHONY: all default
 
@@ -22,4 +23,4 @@ include .depend
 endif
 
 clean:
-	$(RM) genetic_asm $(OBJ)
+	$(RM) genetic_asm $(OBJS)
