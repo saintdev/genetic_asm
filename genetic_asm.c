@@ -19,7 +19,7 @@ typedef union reg {
     uint32_t d[4];
     uint16_t wd[8];
     uint8_t  b[16];
-} register_t;
+} xmm_register_t;
 
 typedef struct instruction {
     uint8_t opcode;
@@ -32,14 +32,14 @@ typedef struct program {
     int length[2];  /* 0 = absolute, 1 = effective */
     int fitness;
     int cost;
-    register_t registers[NUM_REGS];
+    xmm_register_t registers[NUM_REGS];
     instruction_t instructions[MAX_INSTR];
     instruction_t effective[MAX_INSTR];
 } program_t;
 
 typedef struct reference {
-    register_t input[NUM_REGS];
-    register_t output[NUM_REGS];
+    xmm_register_t input[NUM_REGS];
+    xmm_register_t output[NUM_REGS];
     int num_regs_used[2];
 } reference_t;
 
@@ -207,7 +207,7 @@ static void print_program( program_t *program, int debug )
     printf("\n");
 }
 
-static void print_register( register_t *reg, int type )
+static void print_register( xmm_register_t *reg, int type )
 {
     switch (type) {
         case 0:
@@ -217,11 +217,11 @@ static void print_register( register_t *reg, int type )
     }
 }
 
-static void execute_instruction( instruction_t instr, register_t *registers )
+static void execute_instruction( instruction_t instr, xmm_register_t *registers )
 {
-    register_t temp;
-    register_t *output = &registers[instr.operands[0]];
-    register_t *input1 = &registers[instr.operands[1]];
+    xmm_register_t temp;
+    xmm_register_t *output = &registers[instr.operands[0]];
+    xmm_register_t *input1 = &registers[instr.operands[1]];
     uint8_t imm = instr.operands[2];
     int i;
 
@@ -343,7 +343,7 @@ static void execute_instruction( instruction_t instr, register_t *registers )
     memcpy( output, &temp, sizeof(*output) );
 }
 
-static void init_resultregisters(register_t *reference)
+static void init_resultregisters(xmm_register_t *reference)
 {
     int r, i;
     uint16_t levels[8*8];
@@ -353,7 +353,7 @@ static void init_resultregisters(register_t *reference)
             reference[r].wd[i] = levels[i+r*8];
 }
 
-static void init_srcregisters(register_t *regs)
+static void init_srcregisters(xmm_register_t *regs)
 {
     for(int r = 0; r < NUM_REGS; r++)
         for(int i = 0; i < 4; i++)
