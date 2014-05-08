@@ -6,6 +6,8 @@
 #include <time.h>
 #include <string.h>
 #include <limits.h>
+#include <unistd.h>
+#include <getopt.h>
 
 #define NUM_REGS 16
 #define MAX_INSTR 500
@@ -47,6 +49,13 @@ typedef struct genetic_asm_s {
     int num_programs;
     program_t *programs;
 } genetic_asm_t;
+
+static char short_options[] = "h";
+static struct option long_options[] =
+{
+    {"help", no_argument, NULL, 'h'},
+    {0, 0, 0, 0},
+};
 
 enum instructions {
     PUNPCKLWD   = 0,
@@ -767,10 +776,37 @@ static int main_loop(genetic_asm_t *h)
     return 0;
 }
 
+static void usage(void)
+{
+    printf("usage: genetic_asm [options]\n"
+           "\n"
+           "--help           print this message\n");
+
+}
+
+static int parse_cmdline(genetic_asm_t *h, int argc, char **argv)
+{
+    for( optind = 0;; ) {
+        int c = getopt_long(argc, argv, short_options, long_options, NULL);
+        if (c == -1)
+            break;
+        switch(c)
+        {
+            case 'h':
+                usage();
+                exit(0);
+            default:
+                return -1;
+        }
+    }
+}
+
 int main(int argc, char **argv)
 {
     genetic_asm_t h;
     int ltime;
+
+    parse_cmdline(&h, argc, argv);
 
     h.num_programs = NUM_PROGRAMS;
 
