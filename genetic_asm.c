@@ -11,7 +11,7 @@
 
 #define NUM_REGS 16
 #define MAX_INSTR 500
-#define NUM_PROGRAMS 100
+#define DEFAULT_PROGRAMS 100
 #define LEN_ABSOLUTE  0
 #define LEN_EFFECTIVE 1
 #define NUM_REF 3
@@ -50,10 +50,11 @@ typedef struct genetic_asm_s {
     program_t *programs;
 } genetic_asm_t;
 
-static char short_options[] = "h";
+static char short_options[] = "hp:";
 static struct option long_options[] =
 {
-    {"help", no_argument, NULL, 'h'},
+    {"help",       no_argument,       NULL, 'h'},
+    {"population", required_argument, NULL, 'p'},
     {0, 0, 0, 0},
 };
 
@@ -780,7 +781,8 @@ static void usage(void)
 {
     printf("usage: genetic_asm [options]\n"
            "\n"
-           "--help           print this message\n");
+           "  --help                print this help message\n"
+           "  -p, --population      set population size [%d]\n", DEFAULT_PROGRAMS);
 
 }
 
@@ -795,10 +797,20 @@ static int parse_cmdline(genetic_asm_t *h, int argc, char **argv)
             case 'h':
                 usage();
                 exit(0);
+            case 'p':
+                h->num_programs = atoi(optarg);
+                break;
             default:
                 return -1;
         }
     }
+
+    if (h->num_programs < 2) {
+        printf("ERROR: invalid population %d\n", h->num_programs);
+        return -1;
+    }
+
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -806,9 +818,10 @@ int main(int argc, char **argv)
     genetic_asm_t h;
     int ltime;
 
-    parse_cmdline(&h, argc, argv);
+    h.num_programs = DEFAULT_PROGRAMS;
 
-    h.num_programs = NUM_PROGRAMS;
+    if (parse_cmdline(&h, argc, argv) < 0)
+        return -1;
 
     /* get the current calendar time */
     ltime = time(NULL);
