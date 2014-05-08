@@ -649,7 +649,7 @@ static void analyse_program(program_t *prog, reference_t refs[NUM_REF])
     result_cost(prog);
 }
 
-int main()
+int main(int argc, char **argv)
 {
     program_t programs[NUM_PROGRAMS];
     int ltime;
