@@ -649,7 +649,7 @@ static void analyse_program(program_t *prog, reference_t refs[NUM_REF])
     result_cost(prog);
 }
 
-int main(int argc, char **argv)
+static void main_loop()
 {
     program_t programs[NUM_PROGRAMS];
     int ltime;
@@ -713,6 +713,7 @@ int main(int argc, char **argv)
     mutate_program(&programs[idx[1]], probabilities);
     analyse_program(&programs[idx[1]], ref);
     printf("fitness = %d\n", programs[idx[1]].fitness);
+
     while (fitness[0] > 0) {
         run_tournament(programs, &winners[0], 8);
         run_tournament(programs, &winners[1], 8);
@@ -740,6 +741,14 @@ int main(int argc, char **argv)
             }
         }
     }
+
+    return;
+}
+
+int main(int argc, char **argv)
+{
+
+    main_loop();
 
     return 0;
 }
