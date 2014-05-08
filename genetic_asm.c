@@ -362,7 +362,7 @@ static void init_srcregisters(xmm_register_t *regs)
 {
     for(int r = 0; r < NUM_REGS; r++)
         for(int i = 0; i < 4; i++)
-            regs[r].d[i] = rand();
+            regs[r].d[i] = random();
 }
 
 static void init_registers(program_t *program, reference_t *ref)
@@ -381,10 +381,10 @@ static void init_programs(genetic_asm_t *h)
 {
     for(int i = 0; i < h->num_programs; i++) {
         program_t *program = &h->programs[i];
-        program->length[LEN_ABSOLUTE] = (rand() % (96)) + 5;
+        program->length[LEN_ABSOLUTE] = (random() % (96)) + 5;
         for(int j = 0; j < program->length[LEN_ABSOLUTE]; j++) {
-            int instr = rand() % NUM_INSTR;
-            int output = rand() % NUM_REGS;
+            int instr = random() % NUM_INSTR;
+            int output = random() % NUM_REGS;
             int input1 = NUM_REGS, input2 = 0;
             assert(j < MAX_INSTR);
             instruction_t *instruction = &program->instructions[j];
@@ -392,18 +392,18 @@ static void init_programs(genetic_asm_t *h)
             /* FIXME: This should be completely random, instead of the guided randomnes we have below.
              * This may help generate more valid code, however.
              */
-            input1 = rand() % NUM_REGS;
+            input1 = random() % NUM_REGS;
             if( instr < PSLLDQ )
-                input2 = rand() % UINT8_MAX;
+                input2 = random() % UINT8_MAX;
             else if( instr < PSLLQ )
-                input2 = (rand() % 7) + 1;
+                input2 = (random() % 7) + 1;
             else if( instr < PSLLD )
-                input2 = rand() % 64;
+                input2 = random() % 64;
             else if( instr < PSHUFLW )
-                input2 = rand() % 32;
+                input2 = random() % 32;
             else {
-//                 input2 = allowedshuf[rand() % 24];
-                input2 = rand() % UINT8_MAX;
+//                 input2 = allowedshuf[random() % 24];
+                input2 = random() % UINT8_MAX;
             }
 
             assert(instr < NUM_INSTR);
@@ -549,21 +549,21 @@ static void mutate_program( program_t *prog, float probabilities[3] )
 {
     if (prog->length[LEN_ABSOLUTE] == 0)
         return;
-    int p = rand();
-    int ins_idx = rand() % prog->length[LEN_ABSOLUTE];
+    int p = random();
+    int ins_idx = random() % prog->length[LEN_ABSOLUTE];
     instruction_t *instr = &prog->instructions[ins_idx];
 
     assert(ins_idx < MAX_INSTR);
 
     if(p < RAND_MAX * probabilities[0])                                 /* Modify an instruction */
-        instr->opcode = rand() % NUM_INSTR;
+        instr->opcode = random() % NUM_INSTR;
     else if (p < RAND_MAX * (probabilities[0] + probabilities[1])) {    /* Modify a regester */
-        if (rand() < RAND_MAX / 2)
-            instr->operands[0] = rand() % NUM_REGS;
+        if (random() < RAND_MAX / 2)
+            instr->operands[0] = random() % NUM_REGS;
         else
-            instr->operands[1] = rand() % NUM_REGS;
+            instr->operands[1] = random() % NUM_REGS;
     } else                                                              /* Modify a constant */
-        instr->operands[2] = rand() % UINT8_MAX;
+        instr->operands[2] = random() % UINT8_MAX;
 
     assert(instr->opcode < NUM_INSTR);
     /* Invalidate existing fitness */
@@ -586,7 +586,7 @@ static int instruction_cost( uint8_t (*instructions)[4], int numinstructions )
 static int run_tournament(genetic_asm_t *h, program_t *winner, int size)
 {
     int *contestants;
-    int idx = rand() % h->num_programs;
+    int idx = random() % h->num_programs;
     program_t *best = &h->programs[idx];
 
     contestants = calloc(h->num_programs, sizeof(*contestants));
@@ -599,7 +599,7 @@ static int run_tournament(genetic_asm_t *h, program_t *winner, int size)
         contestants[j++] = i;
     }
     for(int i = 0; i < (size - 1); i++) {
-        int ii = rand() % ((h->num_programs-1)- (i+1));
+        int ii = random() % ((h->num_programs-1)- (i+1));
         program_t *prog;
 
         idx = contestants[ii];
@@ -629,8 +629,8 @@ static void crossover( program_t *parents, int delta_length, int delta_pos )
     for(int i = 0; i < 2; i++) {
         if (parents[i].length[LEN_ABSOLUTE] == 0)
             return;
-        point[i] = rand() % parents[i].length[LEN_ABSOLUTE];
-        length[i] = rand() % (parents[i].length[LEN_ABSOLUTE]+1 - point[i]);
+        point[i] = random() % parents[i].length[LEN_ABSOLUTE];
+        length[i] = random() % (parents[i].length[LEN_ABSOLUTE]+1 - point[i]);
     }
 
     for(int i = 0; i < 2; i++)
@@ -666,7 +666,6 @@ static void analyse_program(program_t *prog, reference_t refs[NUM_REF])
 
 static int main_loop(genetic_asm_t *h)
 {
-    int ltime;
     int fitness[2];
     int cost[2];
     int idx[2] = { 0 };
@@ -678,10 +677,6 @@ static int main_loop(genetic_asm_t *h)
     h->programs = calloc(h->num_programs, sizeof(*h->programs));
     if (!h->programs)
         return -1;
-
-    /* get the current calendar time */
-    ltime = time(NULL);
-    srand(ltime);
 
     fitness[0] = INT_MAX;
     fitness[1] = 0;
@@ -742,7 +737,7 @@ static int main_loop(genetic_asm_t *h)
             return -1;
         crossover(winners, 5, 50);
         for(int i = 0; i < 2; i++) {
-            if (rand() < RAND_MAX * 0.75)
+            if (random() < RAND_MAX * 0.75)
                 mutate_program(&winners[i], probabilities);
             analyse_program(&winners[i], ref);
         }
@@ -775,8 +770,13 @@ static int main_loop(genetic_asm_t *h)
 int main(int argc, char **argv)
 {
     genetic_asm_t h;
+    int ltime;
 
     h.num_programs = NUM_PROGRAMS;
+
+    /* get the current calendar time */
+    ltime = time(NULL);
+    srandom(ltime);
 
     return main_loop(&h);
 }
