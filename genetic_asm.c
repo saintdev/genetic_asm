@@ -43,6 +43,11 @@ typedef struct reference {
     int num_regs_used[2];
 } reference_t;
 
+typedef struct genetic_asm_s {
+    int num_programs;
+    program_t *programs;
+} genetic_asm_t;
+
 enum instructions {
     PUNPCKLWD   = 0,
     PUNPCKHWD,
@@ -372,10 +377,10 @@ static void init_reference(reference_t *ref)
         memset(&ref->input[r], 0, sizeof(ref->input[0]));
 }
 
-static void init_programs(program_t *programs)
+static void init_programs(genetic_asm_t *h)
 {
-    for(int i = 0; i < NUM_PROGRAMS; i++) {
-        program_t *program = &programs[i];
+    for(int i = 0; i < h->num_programs; i++) {
+        program_t *program = &h->programs[i];
         program->length[LEN_ABSOLUTE] = (rand() % (96)) + 5;
         for(int j = 0; j < program->length[LEN_ABSOLUTE]; j++) {
             int instr = rand() % NUM_INSTR;
@@ -578,29 +583,39 @@ static int instruction_cost( uint8_t (*instructions)[4], int numinstructions )
     return cost;
 }
 
-static void run_tournament( program_t *programs, program_t *winner, int size)
+static int run_tournament(genetic_asm_t *h, program_t *winner, int size)
 {
-    int contestants[NUM_PROGRAMS];
-    int idx = rand() % NUM_PROGRAMS;
-    program_t *best = &programs[idx];
+    int *contestants;
+    int idx = rand() % h->num_programs;
+    program_t *best = &h->programs[idx];
 
-    for(int i = 0, j = 0; i < NUM_PROGRAMS - 1; i++) {
+    contestants = calloc(h->num_programs, sizeof(*contestants));
+    if (!contestants)
+        return -1;
+
+    for(int i = 0, j = 0; i < h->num_programs - 1; i++) {
         if(i == idx)
             continue;
         contestants[j++] = i;
     }
     for(int i = 0; i < (size - 1); i++) {
-        int ii = rand() % ((NUM_PROGRAMS-1)- (i+1));
+        int ii = rand() % ((h->num_programs-1)- (i+1));
+        program_t *prog;
+
         idx = contestants[ii];
-        if(programs[idx].fitness < best->fitness)
-            best = &programs[idx];
-        else if(programs[idx].fitness == best->fitness)
-            if(programs[idx].cost < best->cost)
-                best = &programs[idx];
-        for(int j = idx; j < NUM_PROGRAMS-1 - (i+1); j++)
+        prog = &h->programs[idx];
+        if(prog->fitness < best->fitness)
+            best = prog;
+        else if(prog->fitness == best->fitness)
+            if(prog->cost < best->cost)
+                best = prog;
+        for(int j = idx; j < h->num_programs-1 - (i+1); j++)
             contestants[j] = contestants[j+1];
     }
     memcpy(winner, best, sizeof(*winner));
+
+    free(contestants);
+    return 0;
 }
 
 static void crossover( program_t *parents, int delta_length, int delta_pos )
@@ -649,9 +664,8 @@ static void analyse_program(program_t *prog, reference_t refs[NUM_REF])
     result_cost(prog);
 }
 
-static void main_loop()
+static int main_loop(genetic_asm_t *h)
 {
-    program_t programs[NUM_PROGRAMS];
     int ltime;
     int fitness[2];
     int cost[2];
@@ -659,6 +673,11 @@ static void main_loop()
     float probabilities[3] = { 0.4, 0.4, 0.2 };
     program_t winners[2];
     reference_t ref[NUM_REF];
+    program_t *progs[2];
+
+    h->programs = calloc(h->num_programs, sizeof(*h->programs));
+    if (!h->programs)
+        return -1;
 
     /* get the current calendar time */
     ltime = time(NULL);
@@ -678,11 +697,11 @@ static void main_loop()
         init_srcregisters(ref[i].input);
         init_reference(&ref[i]);
     }
-    init_programs(programs);
+    init_programs(h);
 
 
-    for(int i = 0; i < NUM_PROGRAMS; i++) {
-        program_t *prog = &programs[i];
+    for(int i = 0; i < h->num_programs; i++) {
+        program_t *prog = &h->programs[i];
         analyse_program(prog, ref);
         printf("length (absolute effective)= %d %d, ", prog->length[LEN_ABSOLUTE], prog->length[LEN_EFFECTIVE]);
 
@@ -708,15 +727,19 @@ static void main_loop()
         printf("fitness = %d\n", prog->fitness);
     }
 
+    progs[0] = &h->programs[idx[0]];
+    progs[1] = &h->programs[idx[1]];
     /* Best program replaces the worst, with a random chance at mutation */
-    memcpy(&programs[idx[1]], &programs[idx[0]], sizeof(programs[0]));
-    mutate_program(&programs[idx[1]], probabilities);
-    analyse_program(&programs[idx[1]], ref);
-    printf("fitness = %d\n", programs[idx[1]].fitness);
+    memcpy(progs[1], progs[0], sizeof(*h->programs));
+    mutate_program(progs[1], probabilities);
+    analyse_program(progs[1], ref);
+    printf("fitness = %d\n", progs[1]->fitness);
 
     while (fitness[0] > 0) {
-        run_tournament(programs, &winners[0], 8);
-        run_tournament(programs, &winners[1], 8);
+        if (run_tournament(h, &winners[0], 8) < 0)
+            return -1;
+        if (run_tournament(h, &winners[1], 8) < 0)
+            return -1;
         crossover(winners, 5, 50);
         for(int i = 0; i < 2; i++) {
             if (rand() < RAND_MAX * 0.75)
@@ -724,31 +747,36 @@ static void main_loop()
             analyse_program(&winners[i], ref);
         }
         for (int j = 0; j < 2; j++) {
-            for (int i = 0; i < NUM_PROGRAMS; i++) {
-                if(programs[i].fitness > winners[j].fitness) {
-                    memcpy(&programs[i], &winners[j], sizeof(programs[0]));
+            for (int i = 0; i < h->num_programs; i++) {
+                program_t *prog = &h->programs[i];
+                if(prog->fitness > winners[j].fitness) {
+                    memcpy(prog, &winners[j], sizeof(*prog));
                     break;
                 }
             }
         }
-        for(int i = 0; i < NUM_PROGRAMS; i++) {
-            if (fitness[0] > programs[i].fitness) {
-                fitness[0] = programs[i].fitness;
-                effective_program(&programs[i], ref[0].num_regs_used[1]);
-                run_program(&programs[i], &ref[0], 1);
-                print_program(&programs[i], 0);
+        for(int i = 0; i < h->num_programs; i++) {
+            program_t *prog = &h->programs[i];
+            if (fitness[0] > prog->fitness) {
+                fitness[0] = prog->fitness;
+                effective_program(prog, ref[0].num_regs_used[1]);
+                run_program(prog, &ref[0], 1);
+                print_program(prog, 0);
                 printf("\n");
             }
         }
     }
 
-    return;
+    free(h->programs);
+
+    return 0;
 }
 
 int main(int argc, char **argv)
 {
+    genetic_asm_t h;
 
-    main_loop();
+    h.num_programs = NUM_PROGRAMS;
 
-    return 0;
+    return main_loop(&h);
 }
