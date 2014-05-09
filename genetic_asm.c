@@ -46,15 +46,21 @@ typedef struct reference {
 } reference_t;
 
 typedef struct genetic_asm_s {
+    int random_seed;
     int num_programs;
     program_t *programs;
 } genetic_asm_t;
+
+enum {
+    OPT_SEED = 256,
+};
 
 static char short_options[] = "hp:";
 static struct option long_options[] =
 {
     {"help",       no_argument,       NULL, 'h'},
     {"population", required_argument, NULL, 'p'},
+    {"seed",       required_argument, NULL, OPT_SEED},
     {0, 0, 0, 0},
 };
 
@@ -781,8 +787,9 @@ static void usage(void)
 {
     printf("usage: genetic_asm [options]\n"
            "\n"
-           "  --help                print this help message\n"
-           "  -p, --population      set population size [%d]\n", DEFAULT_PROGRAMS);
+           "  -h, --help            print this help message\n"
+           "  -p, --population      set population size [%d]\n"
+           "      --seed            set random seed\n", DEFAULT_PROGRAMS);
 
 }
 
@@ -800,6 +807,9 @@ static int parse_cmdline(genetic_asm_t *h, int argc, char **argv)
             case 'p':
                 h->num_programs = atoi(optarg);
                 break;
+            case OPT_SEED:
+                h->random_seed = strtol(optarg, NULL, 0);
+                break;
             default:
                 return -1;
         }
@@ -810,22 +820,25 @@ static int parse_cmdline(genetic_asm_t *h, int argc, char **argv)
         return -1;
     }
 
+    if (!h->random_seed) {
+        /* get the current calendar time */
+        h->random_seed = time(NULL);
+    }
+
     return 0;
 }
 
 int main(int argc, char **argv)
 {
     genetic_asm_t h;
-    int ltime;
 
     h.num_programs = DEFAULT_PROGRAMS;
 
     if (parse_cmdline(&h, argc, argv) < 0)
         return -1;
 
-    /* get the current calendar time */
-    ltime = time(NULL);
-    srandom(ltime);
+    printf("Random Seed: %#x\n", h.random_seed);
+    srandom(h.random_seed);
 
     return main_loop(&h);
 }
