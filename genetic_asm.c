@@ -11,6 +11,8 @@
 
 #define NUM_REGS 16
 #define MAX_INSTR 500
+#define MIN_INSTR 5
+#define INITIAL_INSTR 96
 #define DEFAULT_PROGRAMS 100
 #define LEN_ABSOLUTE  0
 #define LEN_EFFECTIVE 1
@@ -397,7 +399,7 @@ static void init_programs(genetic_asm_t *h)
 {
     for(int i = 0; i < h->num_programs; i++) {
         program_t *program = &h->programs[i];
-        program->length[LEN_ABSOLUTE] = (random() % (96)) + 5;
+        program->length[LEN_ABSOLUTE] = (random() % INITIAL_INSTR) + MIN_INSTR;
         for(int j = 0; j < program->length[LEN_ABSOLUTE]; j++) {
             int instr = random() % NUM_INSTR;
             int output = random() % NUM_REGS;
