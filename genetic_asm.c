@@ -16,7 +16,7 @@
 #define LEN_EFFECTIVE 1
 #define NUM_REF 3
 
-typedef union reg {
+typedef union xmm_register {
     uint64_t q[2];
     uint32_t d[4];
     uint16_t wd[8];
